@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Symulacja EPE — Maszyna SMT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #f8f7f4;
+  --surface: #ffffff;
+  --surface2: #f1f0eb;
+  --border: rgba(0,0,0,0.1);
+  --border2: rgba(0,0,0,0.18);
+  --text: #1a1a18;
+  --text2: #5f5e58;
+  --text3: #8c8b84;
+  --blue: #185fa5;
+  --blue-bg: #e6f1fb;
+  --green: #0f6e56;
+  --green-bg: #e1f5ee;
+  --orange: #993c1d;
+  --orange-bg: #faece7;
+  --gray: #5f5e5a;
+  --gray-bg: #f1efe8;
+  --warn-bg: #faeeda;
+  --warn: #854f0b;
+  --warn-border: #ef9f27;
+  --danger-bg: #fcebeb;
+  --danger: #a32d2d;
+  --danger-border: #e24b4a;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a18;
+    --surface: #26262a;
+    --surface2: #2c2c2a;
+    --border: rgba(255,255,255,0.1);
+    --border2: rgba(255,255,255,0.18);
+    --text: #e8e6de;
+    --text2: #a8a69e;
+    --text3: #6e6c64;
+    --blue: #85b7eb;
+    --blue-bg: #0c447c;
+    --green: #5dcaa5;
+    --green-bg: #085041;
+    --orange: #f0997b;
+    --orange-bg: #712b13;
+    --gray: #b4b2a9;
+    --gray-bg: #444441;
+    --warn-bg: #412402;
+    --warn: #fac775;
+    --warn-border: #ba7517;
+    --danger-bg: #501313;
+    --danger: #f09595;
+    --danger-border: #a32d2d;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.page { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 0.5px solid var(--border2); }
+header h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+header p { font-size: 13px; color: var(--text2); }
+
+.section { margin-bottom: 28px; }
+.section-title { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .04em; }
+
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+
+.card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+}
+.card-metric {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.card-metric .val { font-size: 22px; font-weight: 500; color: var(--text); }
+.card-metric .lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.card-metric .sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+.ctrl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.ctrl-title { font-size: 13px; font-weight: 500; }
+.ctrl-sub { font-size: 11px; color: var(--text2); }
+.slider-row { display: flex; align-items: center; gap: 8px; }
+.slider-row label { font-size: 12px; color: var(--text2); width: 76px; flex-shrink: 0; }
+.slider-row input[type=range] { flex: 1; accent-color: var(--blue); }
+.slider-val { font-size: 13px; font-weight: 500; width: 64px; text-align: right; color: var(--text); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 2px 6px; background: var(--surface); }
+.slider-val:focus { outline: none; border-color: var(--blue); }
+.slider-val::-webkit-inner-spin-button,
+.slider-val::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.slider-val[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+.sumbar {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.sumbar strong { color: var(--text); }
+
+.alert {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  margin-bottom: 10px;
+  display: none;
+}
+.alert.warn { background: var(--warn-bg); color: var(--warn); border: 0.5px solid var(--warn-border); }
+.alert.danger { background: var(--danger-bg); color: var(--danger); border: 0.5px solid var(--danger-border); }
+
+.epe-box {
+  background: var(--surface);
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 28px;
+}
+.epe-title { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+.epe-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.epe-step {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  border-left: 3px solid var(--border2);
+}
+.epe-step.highlight { border-left-color: var(--blue); }
+.epe-step .step-n { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+.epe-step .step-v { font-size: 18px; font-weight: 500; color: var(--text); margin: 2px 0; }
+.epe-step .step-d { font-size: 11px; color: var(--text2); }
+.epe-result {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px;
+  background: var(--blue-bg);
+  border-radius: var(--radius);
+  border: 0.5px solid rgba(24,95,165,0.2);
+}
+.epe-result .epe-val { font-size: 28px; font-weight: 500; color: var(--blue); }
+.epe-result .epe-desc { font-size: 12px; color: var(--text2); }
+
+.chart-wrap { overflow-x: auto; margin-bottom: 6px; }
+canvas { display: block; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { font-size: 11px; font-weight: 500; color: var(--text2); padding: 6px 8px; border-bottom: 0.5px solid var(--border2); text-align: left; white-space: nowrap; }
+td { padding: 6px 8px; border-bottom: 0.5px solid var(--border); color: var(--text); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.table-note { font-size: 11px; color: var(--text3); margin-top: 6px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+.leg-sq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.leg-line { width: 18px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+
+.file-upload-area {
+  border: 1.5px dashed var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s;
+  margin-bottom: 10px;
+}
+.file-upload-area:hover { background: var(--surface2); }
+.file-upload-area input { display: none; }
+.file-upload-area .icon { font-size: 24px; margin-bottom: 6px; color: var(--text3); }
+.file-upload-area p { font-size: 13px; color: var(--text2); }
+.file-upload-area span { font-size: 11px; color: var(--text3); }
+.file-status { font-size: 12px; color: var(--text2); margin-top: 6px; }
+.file-status.ok { color: var(--green); }
+.file-status.err { color: var(--danger); }
+
+.divider { border: none; border-top: 0.5px solid var(--border); margin: 28px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Symulacja kolejki produkcji — Plan EPE</h1>
+  <p>Analiza obciążenia maszyny i czasu oczekiwania zleceń według grup rotacji ABC</p>
+</header>
+
+<div class="section">
+  <div class="section-title">Dane wejściowe</div>
+  <div class="file-upload-area" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <input type="file" id="file-input" accept=".xlsx,.xls" onchange="loadFile(this)">
+    <div class="icon">&#8679;</div>
+    <p>Kliknij lub przeciągnij plik XLSX z danymi zamówień</p>
+    <span>Struktura: kolumna Indeks | kolumny dat | kolumna abc | kolumna CT [s]</span>
+  </div>
+  <div class="file-status" id="file-status">Używane dane domyślne (maj 2025 – kwiecień 2026)</div>
+</div>
+
+<div class="section">
+  <div class="section-title">Parametry maszyny</div>
+  <div class="grid-4" id="machine-ctrls">
+    <div class="card">
+      <div class="ctrl-head"><div class="ctrl-title">Dostępny czas na dzień [min]</div></div>
+      <div class="slider-row">
+        <input type="range" id="sl-avail" min="60" max="1440" step="60" value="480" oninput="syncFromSlider('avail',this.value)">
+        <input type="number" class="slider-val" id="sv-avail" value="480" min="60" max="1440" step="60" onchange="syncFromInput('avail',this.value)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctrl-head"><div class="ctrl-title">Planowane przestoje [min/dzień]</div></div>
+      <div class="slider-row">
+        <input type="range" id="sl-stops" min="0" max="360" step="5" value="30" oninput="syncFromSlider('stops',this.value)">
+        <input type="number" class="slider-val" id="sv-stops" value="30" min="0" max="360" step="5" onchange="syncFromInput('stops',this.value)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctrl-head"><div class="ctrl-title">OEE T (bez przezbrojeń) [%]</div></div>
+      <div class="slider-row">
+        <input type="range" id="sl-oee" min="10" max="100" step="1" value="80" oninput="syncFromSlider('oee',this.value)">
+        <input type="number" class="slider-val" id="sv-oee" value="80" min="10" max="100" step="1" onchange="syncFromInput('oee',this.value)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctrl-head"><div class="ctrl-title">Czas przezbrojenia [min]</div></div>
+      <div class="slider-row">
+        <input type="range" id="sl-setup" min="5" max="180" step="5" value="29" oninput="syncFromSlider('setup',this.value)">
+        <input type="number" class="slider-val" id="sv-setup" value="29" min="5" max="180" step="5" onchange="syncFromInput('setup',this.value)">
+      </div>
+    </div>
+  </div>
+  <div class="sumbar" id="net-display" style="margin-bottom:6px"></div>
+  <div class="alert warn" id="warn-time"></div>
+</div>
+
+<div class="epe-box">
+  <div class="epe-title">Wskaźnik EPE (Every Part Every…)</div>
+  <div class="epe-steps" id="epe-steps"></div>
+  <div class="epe-result" id="epe-result"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Plan produkcji grup ABC</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Limit slotów z kalkulacji EPE: <strong id="slot-limit-display" style="color:var(--text)">—</strong> przezbrojeń/dzień &nbsp;·&nbsp; Przydzielono: <strong id="slot-used-display" style="color:var(--text)">0</strong></div>
+  <div class="grid-4" id="abc-ctrls"></div>
+  <div class="alert warn" id="warn-slots"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Dzienne obciążenie maszyny</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">
+    Po obsłużeniu zaplanowanych slotów, jeśli zostaje czas produkcyjny, maszyna bierze kolejne zlecenia z kolejki (najstarsze pierwsze). <strong style="color:var(--text)">Dostępny czas na produkcję nie jest przekraczany.</strong>
+  </div>
+  <div class="legend">
+    <div class="leg"><div class="leg-sq" style="background:#3266ad"></div>gr. a</div>
+    <div class="leg"><div class="leg-sq" style="background:#1d9e75"></div>gr. b</div>
+    <div class="leg"><div class="leg-sq" style="background:#d85a30"></div>gr. c</div>
+    <div class="leg"><div class="leg-sq" style="background:#888780"></div>gr. d/e/f</div>
+    <div class="leg"><div class="leg-sq" style="background:rgba(216,90,48,0.3)"></div>Przezbrojenia</div>
+    <div class="leg"><div class="leg-line" style="background:#d85a30"></div>Dostępny czas na produkcję</div>
+  </div>
+  <div class="chart-wrap"><canvas id="loadChart" role="img" aria-label="Wykres dziennego obciążenia maszyny"></canvas></div>
+</div>
+
+<div class="section" id="utilization-section" style="display:none">
+  <div class="section-title">Analiza wykorzystania czasu maszyny — cały okres</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+    <div>
+      <div style="position:relative;height:220px"><canvas id="utilChart" role="img" aria-label="Wykres kołowy wykorzystania czasu maszyny"></canvas></div>
+    </div>
+    <div id="util-stats" style="display:flex;flex-direction:column;gap:10px;justify-content:center;padding-top:20px"></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <div class="section-title">Wyniki kolejki — średnie czasy oczekiwania</div>
+  <div class="grid-4" id="result-cards"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Rozkład percentylowy czasu oczekiwania zlecenia w kolejce [dni]</div>
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div style="overflow-x:auto;"><div id="ptable"></div></div>
+  </div>
+  <div class="table-note">P95 = 95% zleceń obsłużonych w ciągu X dni od pojawienia się zapotrzebowania.</div>
+</div>
+
+</div>
+
+<script>
+const DEFAULT_DATA_JSON = '{"2025-05-05":[{"indeks":"PEPCPQM7XX052","qty":24,"abc":"d","ct_s":127.403},{"indeks":"PEPCMPI540057","qty":68,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX044","qty":21,"abc":"e","ct_s":0.0}],"2025-05-06":[{"indeks":"PEPCMPI520016","qty":58,"abc":"c","ct_s":156.518},{"indeks":"PEPCPQM700029","qty":20,"abc":"d","ct_s":77.22},{"indeks":"PEPCPQM700012","qty":20,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM7XX067","qty":19,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0}],"2025-05-07":[{"indeks":"PEPCMPI540029","qty":34,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":34,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":14,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":34,"abc":"b","ct_s":13.953},{"indeks":"PEPCMRU10003","qty":26,"abc":"c","ct_s":3.633},{"indeks":"PEPCMPI520016","qty":9,"abc":"c","ct_s":156.518},{"indeks":"PEPCPAT86055","qty":11,"abc":"c","ct_s":30.0},{"indeks":"PEPCTKF012001","qty":10,"abc":"d","ct_s":13.457},{"indeks":"PEPCMMR650007","qty":17,"abc":"d","ct_s":128.585},{"indeks":"PEPCMPI540032","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCIMX62D003","qty":29,"abc":"d","ct_s":38.16},{"indeks":"PEPCMPI540PV005","qty":79,"abc":"d","ct_s":15.0},{"indeks":"PEPCMMR650061","qty":64,"abc":"d","ct_s":1.104},{"indeks":"PEPCMMR650030","qty":17,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU12004","qty":26,"abc":"d","ct_s":45.0},{"indeks":"PEPCTKF012003","qty":6,"abc":"d","ct_s":2.1},{"indeks":"PEPCMRU11010","qty":26,"abc":"d","ct_s":12.686},{"indeks":"PEPCPQM707015","qty":29,"abc":"d","ct_s":173.5}],"2025-05-08":[{"indeks":"PEPCMLORA001","qty":31,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":41,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":41,"abc":"c","ct_s":54.555},{"indeks":"PEPCMIC501052","qty":44,"abc":"c","ct_s":42.86},{"indeks":"PEPCMRU10003","qty":26,"abc":"c","ct_s":3.633},{"indeks":"PEPCPAT2E1010","qty":40,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":88,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":88,"abc":"d","ct_s":69.533},{"indeks":"PEPCAUTISO020","qty":24,"abc":"d","ct_s":16.0},{"indeks":"PEPCLKO720020","qty":62,"abc":"d","ct_s":7.2},{"indeks":"PEPCLP1013","qty":93,"abc":"d","ct_s":3.075},{"indeks":"PEPCMRU10006","qty":40,"abc":"d","ct_s":16.45},{"indeks":"PEPCPAT010011","qty":55,"abc":"d","ct_s":26.3},{"indeks":"PEPCLKN720009","qty":62,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":62,"abc":"d","ct_s":5.803},{"indeks":"PEPCMRU11002","qty":40,"abc":"d","ct_s":39.825},{"indeks":"PEPCPVM1021013","qty":45,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI535023","qty":34,"abc":"e","ct_s":0.0}],"2025-05-09":[{"indeks":"PEPCMPI540060","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCAHV3001","qty":9,"abc":"f","ct_s":3.343},{"indeks":"PEPCMPI530034","qty":1,"abc":"d","ct_s":80.005}],"2025-05-12":[{"indeks":"PEPCWP0431001","qty":4,"abc":"b","ct_s":3.0},{"indeks":"PEPCTKF012003","qty":24,"abc":"d","ct_s":2.1}],"2025-05-13":[{"indeks":"PEPCMPI502F006","qty":21,"abc":"c","ct_s":58.902},{"indeks":"PEPCPAT2E1010","qty":48,"abc":"c","ct_s":92.862},{"indeks":"PEPCMPI540032","qty":14,"abc":"d","ct_s":0.0},{"indeks":"PEPCIRM1006","qty":1,"abc":"d","ct_s":49.616},{"indeks":"PEPCLKO720011","qty":62,"abc":"d","ct_s":49.727},{"indeks":"PEPCPAT010011","qty":33,"abc":"d","ct_s":26.3},{"indeks":"PEPCPQM7XX044","qty":3,"abc":"e","ct_s":0.0},{"indeks":"PEPCIRM1014","qty":9,"abc":"f","ct_s":0.0}],"2025-05-14":[{"indeks":"PEPCWP0431001","qty":271,"abc":"b","ct_s":3.0},{"indeks":"PEPCMIC500012","qty":18,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI502F008","qty":21,"abc":"c","ct_s":45.0},{"indeks":"PEPCLKN720007","qty":42,"abc":"d","ct_s":35.53},{"indeks":"PEPCLKO720017","qty":48,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKO720012","qty":62,"abc":"d","ct_s":23.691},{"indeks":"PEPCPVM1530070","qty":134,"abc":"d","ct_s":0.309},{"indeks":"PEPCPVM1530080","qty":1,"abc":"d","ct_s":66.669},{"indeks":"PEPCPVM1530074","qty":24,"abc":"d","ct_s":27.514},{"indeks":"PEPCLKN720008","qty":42,"abc":"f","ct_s":0.0}],"2025-05-15":[{"indeks":"PEPCMIC505014","qty":10,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K059","qty":10,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC501072","qty":44,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC250127","qty":54,"abc":"d","ct_s":25.318},{"indeks":"PEPCBATMAN001","qty":1050,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC250124","qty":54,"abc":"d","ct_s":48.567},{"indeks":"PEPCLKN2500019","qty":26,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":26,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":26,"abc":"d","ct_s":5.289},{"indeks":"PEPCMIC501075","qty":43,"abc":"d","ct_s":26.253},{"indeks":"PEPCLKN2010011","qty":26,"abc":"d","ct_s":3.0},{"indeks":"PEPCMIC250113","qty":54,"abc":"d","ct_s":54.542},{"indeks":"PEPCMIC251125","qty":27,"abc":"d","ct_s":17.148},{"indeks":"PEPCLKN2500007","qty":26,"abc":"d","ct_s":30.0},{"indeks":"PEPCLKN720007","qty":20,"abc":"d","ct_s":35.53},{"indeks":"PEPCMIC251128","qty":27,"abc":"d","ct_s":92.064},{"indeks":"PEPCMRU200029","qty":3,"abc":"d","ct_s":116.15},{"indeks":"PEPCLKO720017","qty":14,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKN720019","qty":20,"abc":"d","ct_s":22.504},{"indeks":"PEPCPVM1530055","qty":43,"abc":"d","ct_s":32.213},{"indeks":"PEPCPVM1021013","qty":15,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1530068","qty":43,"abc":"d","ct_s":12.667},{"indeks":"PEPCPVM1530074","qty":19,"abc":"d","ct_s":27.514},{"indeks":"PEPCPVM1530039","qty":43,"abc":"e","ct_s":15.686},{"indeks":"PEPCPVM1530057","qty":43,"abc":"e","ct_s":15.6},{"indeks":"PEPCMIC500060","qty":10,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX074","qty":1,"abc":"d","ct_s":4.89},{"indeks":"PEPCPQM7XX067","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX044","qty":1,"abc":"e","ct_s":0.0}],"2025-05-16":[{"indeks":"PEPCMIC251132","qty":18,"abc":"d","ct_s":16.363},{"indeks":"PEPCIRM-AMB003","qty":104,"abc":"d","ct_s":0.613},{"indeks":"PEPCLKN720016","qty":62,"abc":"d","ct_s":27.953},{"indeks":"PEPCPVM1530080","qty":43,"abc":"d","ct_s":66.669},{"indeks":"PEPCPQM750075","qty":18,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":18,"abc":"d","ct_s":5.0},{"indeks":"PEPCPVM1530062","qty":43,"abc":"e","ct_s":12.0},{"indeks":"PEPCPQM750070","qty":18,"abc":"e","ct_s":20.7},{"indeks":"PEPCPVM1530064","qty":43,"abc":"e","ct_s":76.6},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0},{"indeks":"PEPCPQM7XX067","qty":2,"abc":"d","ct_s":0.0}],"2025-05-19":[{"indeks":"PEPCLKD2500007","qty":78,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC15K103","qty":18,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC500051","qty":11,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC501075","qty":1,"abc":"d","ct_s":26.253},{"indeks":"PEPCLKD2500005","qty":26,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKD2500009","qty":26,"abc":"d","ct_s":4.291},{"indeks":"PEPCMIC501081","qty":6,"abc":"d","ct_s":102.0},{"indeks":"PEPCLKD2500012","qty":26,"abc":"e","ct_s":0.0},{"indeks":"PEPCPVM1530076","qty":21,"abc":"e","ct_s":102.0},{"indeks":"PEPCPQM750082","qty":18,"abc":"e","ct_s":10.5}],"2025-05-20":[{"indeks":"PEPCIMX61D002","qty":3,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC500012","qty":42,"abc":"c","ct_s":7.5},{"indeks":"PEPCMRU10003","qty":14,"abc":"c","ct_s":3.633},{"indeks":"PEPCLKD2500001","qty":78,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC500051","qty":49,"abc":"d","ct_s":0.0},{"indeks":"PEPCVIPER5022","qty":10,"abc":"d","ct_s":4.7},{"indeks":"PEPCAUTISO012","qty":22,"abc":"d","ct_s":16.987},{"indeks":"PEPCMIC505023","qty":9,"abc":"d","ct_s":95.46},{"indeks":"PEPCMMR6XX001","qty":10,"abc":"d","ct_s":72.0},{"indeks":"PEPCMIC500055","qty":42,"abc":"d","ct_s":95.452},{"indeks":"PEPCMIC501081","qty":12,"abc":"d","ct_s":102.0},{"indeks":"PEPCMZC310006","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM750068","qty":2,"abc":"e","ct_s":111.0},{"indeks":"PEPCPVM1021011","qty":60,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX067","qty":3,"abc":"d","ct_s":0.0}],"2025-05-21":[{"indeks":"PEPCMPI540033","qty":31,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":31,"abc":"b","ct_s":13.953},{"indeks":"PEPCMRU120014","qty":20,"abc":"c","ct_s":92.304},{"indeks":"PEPCPVM1530076","qty":22,"abc":"e","ct_s":102.0}],"2025-05-22":[{"indeks":"PEPCMPI540029","qty":47,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540060","qty":31,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1021015","qty":60,"abc":"d","ct_s":73.531},{"indeks":"PEPCMPI535023","qty":31,"abc":"e","ct_s":0.0},{"indeks":"PEPCAUTISO032","qty":10,"abc":"e","ct_s":15.936},{"indeks":"PEPCMPI530015","qty":1,"abc":"b","ct_s":13.953}],"2025-05-23":[{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCMRU10003","qty":27,"abc":"c","ct_s":3.633},{"indeks":"PEPCIRM1006","qty":21,"abc":"d","ct_s":49.616},{"indeks":"PEPCMIC251132","qty":9,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251134","qty":27,"abc":"d","ct_s":78.0},{"indeks":"PEPCEVSE01016","qty":28,"abc":"d","ct_s":7.5},{"indeks":"PEPCIRM1007","qty":88,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":88,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU12004","qty":27,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU11010","qty":27,"abc":"d","ct_s":12.686},{"indeks":"PEPCMIC500049","qty":42,"abc":"d","ct_s":57.193}],"2025-05-24":[{"indeks":"PEPCMMR650053","qty":10,"abc":"d","ct_s":54.545},{"indeks":"PEPCMMR650051","qty":10,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650059","qty":10,"abc":"d","ct_s":49.8}],"2025-05-26":[{"indeks":"PEPCMLORA001","qty":117,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI502F006","qty":21,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":87,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI502F008","qty":21,"abc":"c","ct_s":45.0},{"indeks":"PEPCMMR650055","qty":10,"abc":"d","ct_s":59.0},{"indeks":"PEPCAUTISO020","qty":40,"abc":"d","ct_s":16.0},{"indeks":"PEPCMIC10K060","qty":10,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRP201007","qty":20,"abc":"d","ct_s":85.013}],"2025-05-27":[{"indeks":"PEPCMPI540029","qty":30,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":30,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":63,"abc":"b","ct_s":13.953},{"indeks":"PEPCMIC501052","qty":54,"abc":"c","ct_s":42.86},{"indeks":"PEPCMPI540032","qty":61,"abc":"d","ct_s":0.0},{"indeks":"PEPCIRM1006","qty":67,"abc":"d","ct_s":49.616},{"indeks":"PEPCMMR650020","qty":20,"abc":"d","ct_s":29.175},{"indeks":"PEPCMZC320043","qty":15,"abc":"d","ct_s":84.704},{"indeks":"PEPCMMR650053","qty":10,"abc":"d","ct_s":54.545},{"indeks":"PEPCMZC320045","qty":15,"abc":"d","ct_s":38.0},{"indeks":"PEPCMMR650051","qty":10,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":10,"abc":"d","ct_s":59.0},{"indeks":"PEPCMZC320027","qty":15,"abc":"d","ct_s":5.5},{"indeks":"PEPCMMR670019","qty":7,"abc":"d","ct_s":45.0},{"indeks":"PEPCMIC501081","qty":1,"abc":"d","ct_s":102.0},{"indeks":"PEPCMMR650065","qty":10,"abc":"d","ct_s":51.729},{"indeks":"PEPCPAT2E1003","qty":2,"abc":"c","ct_s":9.0},{"indeks":"PEPCMLORA001","qty":6,"abc":"c","ct_s":4.666},{"indeks":"PEPCPAT2E1010","qty":1,"abc":"c","ct_s":92.862}],"2025-05-28":[{"indeks":"PEPCWP0431001","qty":3,"abc":"b","ct_s":3.0},{"indeks":"PEPCTKF012001","qty":45,"abc":"d","ct_s":13.457},{"indeks":"PEPCBATMAN001","qty":120,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC500051","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT96008","qty":1,"abc":"d","ct_s":16.009},{"indeks":"PEPCEVSE01008","qty":57,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":57,"abc":"d","ct_s":34.05},{"indeks":"PEPCEVSE01016","qty":29,"abc":"d","ct_s":7.5},{"indeks":"PEPCPQM7XX052","qty":1,"abc":"d","ct_s":127.403}],"2025-05-29":[{"indeks":"PEPCMPI540029","qty":63,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":63,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":210,"abc":"b","ct_s":3.0},{"indeks":"PEPCMLORA001","qty":59,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC501052","qty":2,"abc":"c","ct_s":42.86},{"indeks":"PEPCLKN2500009","qty":28,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKN2010011","qty":28,"abc":"d","ct_s":3.0},{"indeks":"PEPCPQM700029","qty":14,"abc":"d","ct_s":77.22},{"indeks":"PEPCPQM700012","qty":14,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM700027","qty":14,"abc":"d","ct_s":15.99},{"indeks":"PEPCLP1013","qty":84,"abc":"d","ct_s":3.075},{"indeks":"PEPCPVM1021013","qty":51,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI536003","qty":30,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI536008","qty":30,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX044","qty":1,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX065","qty":1,"abc":"d","ct_s":0.0}],"2025-05-30":[{"indeks":"PEPCMIC500012","qty":20,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI540032","qty":63,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC15K103","qty":20,"abc":"d","ct_s":57.186},{"indeks":"PEPCMPI540060","qty":63,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC15K020","qty":20,"abc":"d","ct_s":73.332},{"indeks":"PEPCLKN2500007","qty":28,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU200GPS025","qty":1,"abc":"d","ct_s":120.0},{"indeks":"PEPCMPI536011","qty":30,"abc":"e","ct_s":0.0}],"2025-06-02":[{"indeks":"PEPCWP0431001","qty":3,"abc":"b","ct_s":3.0},{"indeks":"PEPCLKD2500007","qty":83,"abc":"c","ct_s":13.332},{"indeks":"PEPCPAT86055","qty":11,"abc":"c","ct_s":30.0},{"indeks":"PEPCLKN2500019","qty":28,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":28,"abc":"d","ct_s":18.45},{"indeks":"PEPCPAT9X012","qty":11,"abc":"d","ct_s":39.0},{"indeks":"PEPCLKD2500005","qty":28,"abc":"d","ct_s":3.185},{"indeks":"PEPCMZC320039","qty":15,"abc":"d","ct_s":1.125},{"indeks":"PEPCPAT96008","qty":11,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":11,"abc":"d","ct_s":81.063},{"indeks":"PEPCIRM-AMB003","qty":43,"abc":"d","ct_s":0.613},{"indeks":"PEPCLKD2500009","qty":28,"abc":"d","ct_s":4.291},{"indeks":"PEPCMMR670019","qty":3,"abc":"d","ct_s":45.0},{"indeks":"PEPCPAT96006","qty":11,"abc":"d","ct_s":44.28},{"indeks":"PEPCMPI540057","qty":1,"abc":"d","ct_s":0.0}],"2025-06-03":[{"indeks":"PEPCMIC501072","qty":56,"abc":"d","ct_s":62.567},{"indeks":"PEPCPQM7XX052","qty":5,"abc":"d","ct_s":127.403},{"indeks":"PEPCLKD2500001","qty":84,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC501075","qty":56,"abc":"d","ct_s":26.253},{"indeks":"PEPCMIC15K024","qty":20,"abc":"d","ct_s":94.282},{"indeks":"PEPCPQM7XX071","qty":5,"abc":"d","ct_s":15.0},{"indeks":"PEPCPQM7XX065","qty":5,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC30013","qty":35,"abc":"d","ct_s":90.0},{"indeks":"PEPCPVM1021013","qty":8,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1021015","qty":60,"abc":"d","ct_s":73.531},{"indeks":"PEPCLKD2500012","qty":24,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX044","qty":5,"abc":"e","ct_s":0.0},{"indeks":"PEPCOR1000008","qty":24,"abc":"e","ct_s":4.3},{"indeks":"PEPCPVM1021011","qty":60,"abc":"e","ct_s":0.0},{"indeks":"PEPCMICRS009","qty":5,"abc":"f","ct_s":15.0},{"indeks":"PEPCMICRS012","qty":5,"abc":"f","ct_s":66.7},{"indeks":"PEPCMPI50X001","qty":2,"abc":"c","ct_s":71.252}],"2025-06-04":[{"indeks":"PEPCPAT9X025","qty":11,"abc":"d","ct_s":14.01},{"indeks":"PEPCMIC15K108","qty":20,"abc":"d","ct_s":159.03},{"indeks":"PEPCPAT9X016","qty":11,"abc":"d","ct_s":22.98},{"indeks":"PEPCMIC15K105","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI540057","qty":58,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX077","qty":35,"abc":"e","ct_s":8.501}],"2025-06-05":[{"indeks":"PEPCIMX61D002","qty":20,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI502F006","qty":11,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC500012","qty":18,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI502F008","qty":20,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC505014","qty":25,"abc":"c","ct_s":8.14},{"indeks":"PEPCMRU10003","qty":13,"abc":"c","ct_s":3.633},{"indeks":"PEPCPAT2E1010","qty":20,"abc":"c","ct_s":92.862},{"indeks":"PEPCMPI520016","qty":40,"abc":"c","ct_s":156.518},{"indeks":"PEPCPAT2E1003","qty":20,"abc":"c","ct_s":9.0},{"indeks":"PEPCMIC10K047","qty":25,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":25,"abc":"d","ct_s":1.133},{"indeks":"PEPCPAT2E1013","qty":20,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC15K103","qty":18,"abc":"d","ct_s":57.186},{"indeks":"PEPCAUTISO020","qty":40,"abc":"d","ct_s":16.0},{"indeks":"PEPCMIC505023","qty":1,"abc":"d","ct_s":95.46},{"indeks":"PEPCMMR650033","qty":40,"abc":"d","ct_s":3.0},{"indeks":"PEPCMMR670019","qty":15,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU10006","qty":13,"abc":"d","ct_s":16.45},{"indeks":"PEPCMRU12004","qty":27,"abc":"d","ct_s":45.0},{"indeks":"PEPCPAT010011","qty":20,"abc":"d","ct_s":26.3},{"indeks":"PEPCMRU11002","qty":5,"abc":"d","ct_s":39.825},{"indeks":"PEPCMRU11010","qty":27,"abc":"d","ct_s":12.686},{"indeks":"PEPCMMR650059","qty":1,"abc":"d","ct_s":49.8}],"2025-06-06":[{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC251125","qty":49,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251128","qty":49,"abc":"d","ct_s":92.064},{"indeks":"PEPCVIRTUPAT9804","qty":54,"abc":"f","ct_s":0.0},{"indeks":"PEPCMIC10K052","qty":1,"abc":"d","ct_s":0.0}],"2025-06-09":[{"indeks":"PEPCWP0431001","qty":3,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI502F006","qty":9,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC251132","qty":49,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251134","qty":49,"abc":"d","ct_s":78.0},{"indeks":"PEPCMIC10K052","qty":25,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR640001","qty":10,"abc":"d","ct_s":41.4},{"indeks":"PEPCVIRTUPAT9806","qty":12,"abc":"f","ct_s":0.0}],"2025-06-10":[{"indeks":"PEPCMRU10003","qty":12,"abc":"c","ct_s":3.633},{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCIMX62D003","qty":30,"abc":"d","ct_s":38.16},{"indeks":"PEPCLKN2500019","qty":16,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":16,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":16,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKN2010011","qty":16,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKN2500007","qty":16,"abc":"d","ct_s":30.0},{"indeks":"PEPCVIPER5022","qty":15,"abc":"d","ct_s":4.7},{"indeks":"PEPCMMR6XX001","qty":15,"abc":"d","ct_s":72.0},{"indeks":"PEPCMRU10006","qty":12,"abc":"d","ct_s":16.45},{"indeks":"PEPCLORAS1008","qty":72,"abc":"d","ct_s":4.5},{"indeks":"PEPCAHV3001","qty":20,"abc":"f","ct_s":3.343}],"2025-06-11":[{"indeks":"PEPCMMR650053","qty":19,"abc":"d","ct_s":54.545},{"indeks":"PEPCMIC10K050","qty":25,"abc":"d","ct_s":97.93},{"indeks":"PEPCMMR650051","qty":20,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":20,"abc":"d","ct_s":59.0},{"indeks":"PEPCMRU11002","qty":20,"abc":"d","ct_s":39.825},{"indeks":"PEPCPVM1530070","qty":72,"abc":"d","ct_s":0.309}],"2025-06-12":[{"indeks":"PEPCMPI540033","qty":34,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":34,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X001","qty":29,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":30,"abc":"c","ct_s":54.555},{"indeks":"PEPCMRU10003","qty":27,"abc":"c","ct_s":3.633},{"indeks":"PEPCMMR650020","qty":10,"abc":"d","ct_s":29.175},{"indeks":"PEPCMMR650053","qty":1,"abc":"d","ct_s":54.545},{"indeks":"PEPCLKD2500009","qty":16,"abc":"d","ct_s":4.291},{"indeks":"PEPCEVSE01008","qty":1,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":1,"abc":"d","ct_s":34.05},{"indeks":"PEPCSMARTTDR003","qty":25,"abc":"d","ct_s":14.1},{"indeks":"PEPCLKD2500015","qty":16,"abc":"d","ct_s":0.0},{"indeks":"PEPCAUTISO014","qty":2,"abc":"f","ct_s":0.0}],"2025-06-13":[{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59},{"indeks":"PEPCST0001004","qty":11,"abc":"d","ct_s":0.9},{"indeks":"PEPCMIC500051","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR670019","qty":2,"abc":"d","ct_s":45.0},{"indeks":"PEPCMIC501081","qty":18,"abc":"d","ct_s":102.0},{"indeks":"PEPCMPI502F006","qty":1,"abc":"c","ct_s":58.902}],"2025-06-16":[{"indeks":"PEPCMPI540029","qty":34,"abc":"b","ct_s":7.501},{"indeks":"PEPCWP0431001","qty":236,"abc":"b","ct_s":3.0},{"indeks":"PEPCLKD2500007","qty":49,"abc":"c","ct_s":13.332},{"indeks":"PEPCLKD2500001","qty":48,"abc":"d","ct_s":49.063},{"indeks":"PEPCIRM-AMB003","qty":81,"abc":"d","ct_s":0.613},{"indeks":"PEPCEVSE01008","qty":40,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":40,"abc":"d","ct_s":34.05},{"indeks":"PEPCEVSE01016","qty":1,"abc":"d","ct_s":7.5},{"indeks":"PEPCPQM7XX071","qty":10,"abc":"d","ct_s":15.0},{"indeks":"PEPCLKD2500012","qty":4,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI535023","qty":34,"abc":"e","ct_s":0.0},{"indeks":"PEPCPAT86055","qty":1,"abc":"c","ct_s":30.0}],"2025-06-17":[{"indeks":"PEPCMPI540029","qty":28,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":28,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI50X003","qty":25,"abc":"c","ct_s":54.555},{"indeks":"PEPCLKD2500007","qty":2,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC500012","qty":58,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI520016","qty":2,"abc":"c","ct_s":156.518},{"indeks":"PEPCMMR650061","qty":240,"abc":"d","ct_s":1.104},{"indeks":"PEPCPVM1530070","qty":72,"abc":"d","ct_s":0.309},{"indeks":"PEPCPVM1530080","qty":35,"abc":"d","ct_s":66.669},{"indeks":"PEPCPVM1530068","qty":36,"abc":"d","ct_s":12.667},{"indeks":"PEPCPQM750068","qty":16,"abc":"e","ct_s":111.0},{"indeks":"PEPCPVM1530064","qty":36,"abc":"e","ct_s":76.6}],"2025-06-18":[{"indeks":"PEPCMLORA001","qty":3,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":26,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI540032","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI540060","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCERP1006","qty":20,"abc":"d","ct_s":23.088},{"indeks":"PEPCLKD2500005","qty":16,"abc":"d","ct_s":3.185},{"indeks":"PEPCEVSE01016","qty":38,"abc":"d","ct_s":7.5},{"indeks":"PEPCMMR670019","qty":3,"abc":"d","ct_s":45.0},{"indeks":"PEPCSMARTTDR001","qty":25,"abc":"d","ct_s":30.906},{"indeks":"PEPCTDR420006","qty":36,"abc":"d","ct_s":40.92},{"indeks":"PEPCPQM707015","qty":30,"abc":"d","ct_s":173.5},{"indeks":"PEPCPVM1021015","qty":20,"abc":"d","ct_s":73.531},{"indeks":"PEPCPVM1530039","qty":36,"abc":"e","ct_s":15.686},{"indeks":"PEPCPVM1530057","qty":36,"abc":"e","ct_s":15.6},{"indeks":"PEPCPVM1530062","qty":36,"abc":"e","ct_s":12.0}],"2025-06-23":[{"indeks":"PEPCPAT2E1013","qty":23,"abc":"d","ct_s":69.533},{"indeks":"PEPCMMR670015","qty":30,"abc":"d","ct_s":80.6},{"indeks":"PEPCPVM1530055","qty":36,"abc":"d","ct_s":32.213},{"indeks":"PEPCPVM1530068","qty":1,"abc":"d","ct_s":12.667},{"indeks":"PEPCPVM1530074","qty":36,"abc":"d","ct_s":27.514},{"indeks":"PEPCPVM1530076","qty":36,"abc":"e","ct_s":102.0}],"2025-06-24":[{"indeks":"PEPCPAT2E1010","qty":23,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":23,"abc":"c","ct_s":9.0},{"indeks":"PEPCMMR650020","qty":10,"abc":"d","ct_s":29.175},{"indeks":"PEPCPAT010011","qty":23,"abc":"d","ct_s":26.3},{"indeks":"PEPCPQM7XX044","qty":10,"abc":"e","ct_s":0.0}],"2025-06-25":[{"indeks":"PEPCMPI520016","qty":44,"abc":"c","ct_s":156.518},{"indeks":"PEPCPQM7XX052","qty":3,"abc":"d","ct_s":127.403},{"indeks":"PEPCMPI540PV005","qty":38,"abc":"d","ct_s":15.0},{"indeks":"PEPCPAT9X025","qty":13,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":13,"abc":"d","ct_s":22.98},{"indeks":"PEPCPQM7XX067","qty":6,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC500060","qty":58,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM7XX074","qty":1,"abc":"d","ct_s":4.89}],"2025-06-26":[{"indeks":"PEPCMLORA001","qty":15,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC505014","qty":24,"abc":"c","ct_s":8.14},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCPAT86055","qty":13,"abc":"c","ct_s":30.0},{"indeks":"PEPCMIC10K047","qty":17,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":24,"abc":"d","ct_s":1.133},{"indeks":"PEPCMZC320043","qty":3,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC500051","qty":24,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT9X012","qty":5,"abc":"d","ct_s":39.0},{"indeks":"PEPCMZC320027","qty":20,"abc":"d","ct_s":5.5},{"indeks":"PEPCPAT96008","qty":2,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":6,"abc":"d","ct_s":81.063},{"indeks":"PEPCMIC505023","qty":24,"abc":"d","ct_s":95.46},{"indeks":"PEPCLP1013","qty":6,"abc":"d","ct_s":3.075},{"indeks":"PEPCPAT96006","qty":4,"abc":"d","ct_s":44.28},{"indeks":"PEPCMIC500055","qty":58,"abc":"d","ct_s":95.452},{"indeks":"PEPCMRU030021","qty":24,"abc":"d","ct_s":16.65},{"indeks":"PEPCMIC500049","qty":58,"abc":"d","ct_s":57.193},{"indeks":"PEPCMRU030027","qty":24,"abc":"d","ct_s":66.0},{"indeks":"PEPCMRU030029","qty":24,"abc":"d","ct_s":47.371},{"indeks":"PEPCPVM1021020","qty":20,"abc":"e","ct_s":24.326}],"2025-06-27":[{"indeks":"PEPCMPI50X001","qty":25,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":25,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI520016","qty":1,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC10K047","qty":7,"abc":"d","ct_s":74.025},{"indeks":"PEPCTKF012001","qty":5,"abc":"d","ct_s":13.457},{"indeks":"PEPCMIC250127","qty":8,"abc":"d","ct_s":25.318},{"indeks":"PEPCMPI540032","qty":28,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC250124","qty":9,"abc":"d","ct_s":48.567},{"indeks":"PEPCPQM7XX052","qty":7,"abc":"d","ct_s":127.403},{"indeks":"PEPCMIC250113","qty":23,"abc":"d","ct_s":54.542},{"indeks":"PEPCVIPER5022","qty":5,"abc":"d","ct_s":4.7},{"indeks":"PEPCPQM7XX067","qty":3,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1530080","qty":1,"abc":"d","ct_s":66.669},{"indeks":"PEPCPVM1530068","qty":1,"abc":"d","ct_s":12.667},{"indeks":"PEPCMPI536003","qty":27,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI536008","qty":28,"abc":"e","ct_s":0.0},{"indeks":"PEPCPVM1530055","qty":1,"abc":"d","ct_s":32.213}],"2025-06-30":[{"indeks":"PEPCPAT9X012","qty":8,"abc":"d","ct_s":39.0},{"indeks":"PEPCMZC320045","qty":20,"abc":"d","ct_s":38.0},{"indeks":"PEPCMZC320039","qty":20,"abc":"d","ct_s":1.125},{"indeks":"PEPCPAT96008","qty":11,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":7,"abc":"d","ct_s":81.063},{"indeks":"PEPCIRM-AMB003","qty":17,"abc":"d","ct_s":0.613},{"indeks":"PEPCPQM7XX067","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT96006","qty":9,"abc":"d","ct_s":44.28},{"indeks":"PEPCPVM1021013","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1021018","qty":20,"abc":"f","ct_s":60.0}],"2025-07-01":[{"indeks":"PEPCWP0431001","qty":22,"abc":"b","ct_s":3.0},{"indeks":"PEPCTKF012001","qty":45,"abc":"d","ct_s":13.457},{"indeks":"PEPCMZC320043","qty":17,"abc":"d","ct_s":84.704},{"indeks":"PEPCLP1013","qty":84,"abc":"d","ct_s":3.075},{"indeks":"PEPCTKF013003","qty":54,"abc":"d","ct_s":24.338},{"indeks":"PEPCMPI502028","qty":20,"abc":"f","ct_s":0.0},{"indeks":"PEPCMRU200029","qty":1,"abc":"d","ct_s":116.15}],"2025-07-02":[{"indeks":"PEPCMPI502F006","qty":10,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC500012","qty":20,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI502F008","qty":13,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC15K103","qty":20,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC15K020","qty":20,"abc":"d","ct_s":73.332},{"indeks":"PEPCPQM700029","qty":20,"abc":"d","ct_s":77.22},{"indeks":"PEPCVIPER5022","qty":10,"abc":"d","ct_s":4.7},{"indeks":"PEPCPQM700012","qty":20,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM700027","qty":20,"abc":"d","ct_s":15.99},{"indeks":"PEPCMRP201007","qty":20,"abc":"d","ct_s":85.013},{"indeks":"PEPCMZC20E004","qty":50,"abc":"e","ct_s":31.6},{"indeks":"PEPCIRM1002","qty":1,"abc":"d","ct_s":0.0}],"2025-07-03":[{"indeks":"PEPCMPI540029","qty":40,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":40,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":200,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":40,"abc":"b","ct_s":13.953},{"indeks":"PEPCMLORA001","qty":5,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":33,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":4,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI502F008","qty":15,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC505014","qty":16,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K047","qty":16,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":16,"abc":"d","ct_s":1.133},{"indeks":"PEPCTKF012001","qty":42,"abc":"d","ct_s":13.457},{"indeks":"PEPCMPI540032","qty":40,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR650020","qty":10,"abc":"d","ct_s":29.175},{"indeks":"PEPCMIC15K103","qty":27,"abc":"d","ct_s":57.186},{"indeks":"PEPCMMR650053","qty":10,"abc":"d","ct_s":54.545},{"indeks":"PEPCMPI540060","qty":3,"abc":"d","ct_s":0.0},{"indeks":"PEPCAKU003","qty":86,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC10K050","qty":16,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC251132","qty":40,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251125","qty":40,"abc":"d","ct_s":17.148},{"indeks":"PEPCMMR650051","qty":10,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":10,"abc":"d","ct_s":59.0},{"indeks":"PEPCMIC15K105","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCTKF012003","qty":36,"abc":"d","ct_s":2.1},{"indeks":"PEPCMIC30013","qty":19,"abc":"d","ct_s":90.0},{"indeks":"PEPCMIC500060","qty":27,"abc":"e","ct_s":0.0}],"2025-07-04":[{"indeks":"PEPCMIC250127","qty":15,"abc":"d","ct_s":25.318},{"indeks":"PEPCMIC250124","qty":14,"abc":"d","ct_s":48.567},{"indeks":"PEPCMIC15K024","qty":20,"abc":"d","ct_s":94.282},{"indeks":"PEPCMRU200029","qty":1,"abc":"d","ct_s":116.15}],"2025-07-07":[{"indeks":"PEPCMIC15K108","qty":20,"abc":"d","ct_s":159.03},{"indeks":"PEPCMIC251134","qty":40,"abc":"d","ct_s":78.0},{"indeks":"PEPCMIC251128","qty":40,"abc":"d","ct_s":92.064}],"2025-07-08":[{"indeks":"PEPCMPI502F006","qty":18,"abc":"c","ct_s":58.902},{"indeks":"PEPCMRU10003","qty":28,"abc":"c","ct_s":3.633},{"indeks":"PEPCMMR6XX001","qty":10,"abc":"d","ct_s":72.0},{"indeks":"PEPCMRU12004","qty":28,"abc":"d","ct_s":45.0},{"indeks":"PEPCMPI540057","qty":5,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU11010","qty":28,"abc":"d","ct_s":12.686},{"indeks":"PEPCMPI536003","qty":3,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI536011","qty":28,"abc":"e","ct_s":0.0},{"indeks":"PEPCMICSE005","qty":30,"abc":"e","ct_s":44.28},{"indeks":"PEPCMPI540031","qty":40,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI540040","qty":40,"abc":"f","ct_s":0.0}],"2025-07-09":[{"indeks":"PEPCMPI50X003","qty":44,"abc":"c","ct_s":54.555},{"indeks":"PEPCLKO720020","qty":70,"abc":"d","ct_s":7.2},{"indeks":"PEPCTKF012003","qty":24,"abc":"d","ct_s":2.1},{"indeks":"PEPCMRU21004","qty":20,"abc":"d","ct_s":75.0}],"2025-07-10":[{"indeks":"PEPCMLORA001","qty":57,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC500012","qty":27,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC250127","qty":39,"abc":"d","ct_s":25.318},{"indeks":"PEPCMIC250124","qty":39,"abc":"d","ct_s":48.567},{"indeks":"PEPCMZC320043","qty":30,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC251132","qty":19,"abc":"d","ct_s":16.363},{"indeks":"PEPCMZC320045","qty":30,"abc":"d","ct_s":38.0},{"indeks":"PEPCMIC250113","qty":39,"abc":"d","ct_s":54.542},{"indeks":"PEPCMIC251125","qty":19,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":19,"abc":"d","ct_s":78.0},{"indeks":"PEPCMZC320027","qty":30,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":30,"abc":"d","ct_s":1.125},{"indeks":"PEPCEVSE01008","qty":39,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01016","qty":40,"abc":"d","ct_s":7.5},{"indeks":"PEPCPQM700012","qty":24,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM700027","qty":24,"abc":"d","ct_s":15.99},{"indeks":"PEPCPVM1021013","qty":59,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1021015","qty":21,"abc":"d","ct_s":73.531},{"indeks":"PEPCPVM1021011","qty":21,"abc":"e","ct_s":0.0}],"2025-07-11":[{"indeks":"PEPCMLORA001","qty":3,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC505014","qty":20,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K050","qty":20,"abc":"d","ct_s":97.93},{"indeks":"PEPCMPI516026","qty":15,"abc":"f","ct_s":0.0}],"2025-07-14":[{"indeks":"PEPCIRM-AMB003","qty":82,"abc":"d","ct_s":0.613},{"indeks":"PEPCMIC10K060","qty":20,"abc":"d","ct_s":0.0}],"2025-07-15":[{"indeks":"PEPCMIC500012","qty":40,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC501052","qty":31,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC501072","qty":31,"abc":"d","ct_s":62.567},{"indeks":"PEPCPVM1530070","qty":42,"abc":"d","ct_s":0.309},{"indeks":"PEPCPVM1530055","qty":33,"abc":"d","ct_s":32.213},{"indeks":"PEPCPVM1530080","qty":33,"abc":"d","ct_s":66.669},{"indeks":"PEPCPVM1530068","qty":31,"abc":"d","ct_s":12.667},{"indeks":"PEPCPVM1530039","qty":33,"abc":"e","ct_s":15.686},{"indeks":"PEPCPVM1530057","qty":33,"abc":"e","ct_s":15.6},{"indeks":"PEPCPVM1530062","qty":33,"abc":"e","ct_s":12.0}],"2025-07-16":[{"indeks":"PEPCWP0431001","qty":16,"abc":"b","ct_s":3.0},{"indeks":"PEPCPAT86055","qty":15,"abc":"c","ct_s":30.0},{"indeks":"PEPCBATMAN001","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC10K052","qty":16,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1530070","qty":66,"abc":"d","ct_s":0.309},{"indeks":"PEPCOR1000008","qty":40,"abc":"e","ct_s":4.3},{"indeks":"PEPCMPI516024","qty":15,"abc":"f","ct_s":0.0},{"indeks":"PEPCMIC501052","qty":1,"abc":"c","ct_s":42.86},{"indeks":"PEPCIMX62D003","qty":1,"abc":"d","ct_s":38.16}],"2025-07-17":[{"indeks":"PEPCMPI540029","qty":16,"abc":"b","ct_s":7.501},{"indeks":"PEPCMZC320045","qty":1,"abc":"d","ct_s":38.0},{"indeks":"PEPCMPI516014","qty":12,"abc":"f","ct_s":12.35},{"indeks":"PEPCMIC10K065","qty":20,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI516022","qty":15,"abc":"f","ct_s":0.0}],"2025-07-18":[{"indeks":"PEPCMIC501052","qty":2,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC501072","qty":3,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC501075","qty":3,"abc":"d","ct_s":26.253},{"indeks":"PEPCEVSE01016","qty":4,"abc":"d","ct_s":7.5},{"indeks":"PEPCMPI516014","qty":3,"abc":"f","ct_s":12.35},{"indeks":"PEPCMPI516018","qty":15,"abc":"f","ct_s":0.0}],"2025-07-21":[{"indeks":"PEPCST0001004","qty":72,"abc":"d","ct_s":0.9},{"indeks":"PEPCMIC251128","qty":19,"abc":"d","ct_s":92.064},{"indeks":"PEPCAUTISO020","qty":30,"abc":"d","ct_s":16.0}],"2025-07-22":[{"indeks":"PEPCMMR650061","qty":96,"abc":"d","ct_s":1.104},{"indeks":"PEPCAUTISO012","qty":27,"abc":"d","ct_s":16.987},{"indeks":"PEPCEVSE01014","qty":39,"abc":"d","ct_s":34.05},{"indeks":"PEPCMZC20E004","qty":20,"abc":"e","ct_s":31.6},{"indeks":"PEPCMIC500060","qty":40,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI516020","qty":15,"abc":"f","ct_s":0.0}],"2025-07-23":[{"indeks":"PEPCWP0431001","qty":66,"abc":"b","ct_s":3.0},{"indeks":"PEPCPAT86055","qty":7,"abc":"c","ct_s":30.0},{"indeks":"PEPCMIC500055","qty":40,"abc":"d","ct_s":95.452},{"indeks":"PEPCMIC501081","qty":27,"abc":"d","ct_s":102.0},{"indeks":"PEPCMPI516016","qty":15,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT95R004","qty":7,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT95R006","qty":7,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT97005","qty":7,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT9XR003","qty":7,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT9XR005","qty":7,"abc":"f","ct_s":0.0}],"2025-07-24":[{"indeks":"PEPCPAT9X025","qty":7,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":7,"abc":"d","ct_s":22.98},{"indeks":"PEPCPVM1530070","qty":24,"abc":"d","ct_s":0.309},{"indeks":"PEPCPVM1530074","qty":1,"abc":"d","ct_s":27.514},{"indeks":"PEPCPVM1530076","qty":33,"abc":"e","ct_s":102.0},{"indeks":"PEPCPVM1530064","qty":33,"abc":"e","ct_s":76.6},{"indeks":"PEPCAUTISO014","qty":1,"abc":"f","ct_s":0.0},{"indeks":"PEPCIMX61D002","qty":2,"abc":"b","ct_s":25.59}],"2025-07-25":[{"indeks":"PEPCWP0431001","qty":10,"abc":"b","ct_s":3.0},{"indeks":"PEPCPQM700029","qty":24,"abc":"d","ct_s":77.22},{"indeks":"PEPCPVM1021013","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1021015","qty":39,"abc":"d","ct_s":73.531},{"indeks":"PEPCAUTISO014","qty":7,"abc":"f","ct_s":0.0}],"2025-07-28":[{"indeks":"PEPCMRU120014","qty":30,"abc":"c","ct_s":92.304},{"indeks":"PEPCPAT9X025","qty":15,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT96008","qty":15,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":15,"abc":"d","ct_s":81.063},{"indeks":"PEPCPAT96006","qty":15,"abc":"d","ct_s":44.28}],"2025-07-29":[{"indeks":"PEPCPAT9X016","qty":15,"abc":"d","ct_s":22.98},{"indeks":"PEPCMIC500049","qty":40,"abc":"d","ct_s":57.193},{"indeks":"PEPCPVM1530074","qty":32,"abc":"d","ct_s":27.514},{"indeks":"PEPCPAT12E001","qty":1,"abc":"d","ct_s":7.6}],"2025-07-30":[{"indeks":"PEPCMPI540029","qty":34,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":34,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":34,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI502F006","qty":22,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":22,"abc":"c","ct_s":45.0},{"indeks":"PEPCMPI540032","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCBATMAN001","qty":575,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR650020","qty":12,"abc":"d","ct_s":29.175},{"indeks":"PEPCMMR650053","qty":10,"abc":"d","ct_s":54.545},{"indeks":"PEPCMMR650051","qty":10,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":10,"abc":"d","ct_s":59.0},{"indeks":"PEPCSMARTTDR001","qty":73,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":73,"abc":"d","ct_s":14.1},{"indeks":"PEPCPAT9X012","qty":1,"abc":"d","ct_s":39.0}],"2025-07-31":[{"indeks":"PEPCMPI540033","qty":34,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI50X001","qty":15,"abc":"c","ct_s":71.252},{"indeks":"PEPCPAT9X012","qty":15,"abc":"d","ct_s":39.0},{"indeks":"PEPCMPI540PV005","qty":56,"abc":"d","ct_s":15.0},{"indeks":"PEPCERP1006","qty":10,"abc":"d","ct_s":23.088},{"indeks":"PEPCPQM7XX071","qty":13,"abc":"d","ct_s":15.0},{"indeks":"PEPCMZC310006","qty":10,"abc":"d","ct_s":0.0}],"2025-08-01":[{"indeks":"PEPCMMR650007","qty":26,"abc":"d","ct_s":128.585},{"indeks":"PEPCMIC10K050","qty":1,"abc":"d","ct_s":97.93},{"indeks":"PEPCMMR650030","qty":26,"abc":"d","ct_s":45.0},{"indeks":"PEPCPVM1021011","qty":39,"abc":"e","ct_s":0.0},{"indeks":"PEPCPVM1020031","qty":4,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT86058","qty":5,"abc":"f","ct_s":0.0}],"2025-08-04":[{"indeks":"PEPCMPI540060","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCEVSE01016","qty":36,"abc":"d","ct_s":7.5},{"indeks":"PEPCMMR650065","qty":10,"abc":"d","ct_s":51.729},{"indeks":"PEPCMZC310006","qty":10,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI535023","qty":34,"abc":"e","ct_s":0.0},{"indeks":"PEPCPVM1020029","qty":4,"abc":"f","ct_s":0.0},{"indeks":"PEPCMIC500012","qty":20,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI530015","qty":34,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540029","qty":34,"abc":"b","ct_s":7.501},{"indeks":"PEPCMIC10K047","qty":25,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":28,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC505014","qty":28,"abc":"c","ct_s":8.14},{"indeks":"PEPCPQM7XX074","qty":13,"abc":"d","ct_s":4.89},{"indeks":"PEPCIRM1006","qty":1,"abc":"d","ct_s":49.616},{"indeks":"PEPCMLORA001","qty":100,"abc":"c","ct_s":4.666},{"indeks":"PEPCIMX61D002","qty":26,"abc":"b","ct_s":25.59}],"2025-08-05":[{"indeks":"PEPCMIC10013","qty":126,"abc":"c","ct_s":93.157},{"indeks":"PEPCTKF012001","qty":78,"abc":"d","ct_s":13.457},{"indeks":"PEPCMMR670019","qty":10,"abc":"d","ct_s":45.0},{"indeks":"PEPCMIC500055","qty":20,"abc":"d","ct_s":95.452},{"indeks":"PEPCMMR650059","qty":6,"abc":"d","ct_s":49.8},{"indeks":"PEPCPVM1530062","qty":1,"abc":"e","ct_s":12.0}],"2025-08-06":[{"indeks":"PEPCIMX61D002","qty":6,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC505014","qty":20,"abc":"c","ct_s":8.14},{"indeks":"PEPCMPI540032","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX052","qty":13,"abc":"d","ct_s":127.403},{"indeks":"PEPCMIC500051","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC505023","qty":20,"abc":"d","ct_s":95.46},{"indeks":"PEPCMRU200GPS025","qty":10,"abc":"d","ct_s":120.0},{"indeks":"PEPCTKF013003","qty":26,"abc":"d","ct_s":24.338},{"indeks":"PEPCMMR650059","qty":4,"abc":"d","ct_s":49.8},{"indeks":"PEPCMIC30013","qty":30,"abc":"d","ct_s":90.0},{"indeks":"PEPCMPI502F006","qty":1,"abc":"c","ct_s":58.902}],"2025-08-07":[{"indeks":"PEPCMMR670015","qty":8,"abc":"d","ct_s":80.6},{"indeks":"PEPCMPI540031","qty":34,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI540040","qty":34,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI50X001","qty":1,"abc":"c","ct_s":71.252}],"2025-08-08":[{"indeks":"PEPCMRU120014","qty":75,"abc":"c","ct_s":92.304},{"indeks":"PEPCTKF013003","qty":6,"abc":"d","ct_s":24.338},{"indeks":"PEPCMPI540032","qty":2,"abc":"d","ct_s":0.0}],"2025-08-11":[{"indeks":"PEPCMRU120014","qty":56,"abc":"c","ct_s":92.304},{"indeks":"PEPCBATMAN001","qty":75,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX065","qty":13,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500012","qty":22,"abc":"e","ct_s":0.0}],"2025-08-12":[{"indeks":"PEPCMPI540029","qty":30,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":30,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":8,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":30,"abc":"b","ct_s":13.953},{"indeks":"PEPCMLORA001","qty":2,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC500062","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC500049","qty":20,"abc":"d","ct_s":57.193},{"indeks":"PEPCMPI535023","qty":30,"abc":"e","ct_s":0.0},{"indeks":"PEPCPAT86055","qty":1,"abc":"c","ct_s":30.0}],"2025-08-13":[{"indeks":"PEPCMPI540029","qty":10,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":10,"abc":"b","ct_s":3.814},{"indeks":"PEPCMIC500012","qty":16,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC10K047","qty":23,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":29,"abc":"d","ct_s":1.133},{"indeks":"PEPCPQM7XX052","qty":13,"abc":"d","ct_s":127.403},{"indeks":"PEPCMIC10K050","qty":28,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC501075","qty":31,"abc":"d","ct_s":26.253},{"indeks":"PEPCPQM7XX074","qty":13,"abc":"d","ct_s":4.89},{"indeks":"PEPCMIC10K052","qty":28,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX071","qty":13,"abc":"d","ct_s":15.0},{"indeks":"PEPCMPI530034","qty":38,"abc":"d","ct_s":80.005},{"indeks":"PEPCMIC15K115","qty":16,"abc":"f","ct_s":0.0}],"2025-08-14":[{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCLKD2500007","qty":2,"abc":"c","ct_s":13.332}],"2025-08-18":[{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCMPI540032","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC15K020","qty":16,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC15K108","qty":16,"abc":"d","ct_s":159.03},{"indeks":"PEPCMIC15K024","qty":16,"abc":"d","ct_s":94.282},{"indeks":"PEPCPQM7XX065","qty":9,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR640001","qty":10,"abc":"d","ct_s":41.4},{"indeks":"PEPCRAMKAA002","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCPVM1530057","qty":1,"abc":"e","ct_s":15.6}],"2025-08-19":[{"indeks":"PEPCMRU120014","qty":2,"abc":"c","ct_s":92.304},{"indeks":"PEPCMIC10K059","qty":11,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC15K103","qty":16,"abc":"d","ct_s":57.186},{"indeks":"PEPCMPI540060","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCAUTISO012","qty":3,"abc":"d","ct_s":16.987},{"indeks":"PEPCMPI536018","qty":10,"abc":"d","ct_s":21.171},{"indeks":"PEPCMPI536014","qty":10,"abc":"d","ct_s":161.133}],"2025-08-20":[{"indeks":"PEPCMPI50X001","qty":6,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":6,"abc":"c","ct_s":54.555},{"indeks":"PEPCMMR650033","qty":28,"abc":"d","ct_s":3.0},{"indeks":"PEPCMRP201007","qty":18,"abc":"d","ct_s":85.013},{"indeks":"PEPCIMX62D003","qty":1,"abc":"d","ct_s":38.16},{"indeks":"PEPCPAT8X002","qty":1,"abc":"f","ct_s":0.0}],"2025-08-21":[{"indeks":"PEPCMPI540029","qty":113,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":113,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":151,"abc":"b","ct_s":13.953},{"indeks":"PEPCLKD2500007","qty":66,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":10,"abc":"c","ct_s":161.129},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCMPI540032","qty":113,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500001","qty":66,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKN2500019","qty":4,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":11,"abc":"d","ct_s":18.45},{"indeks":"PEPCMPI540060","qty":31,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKN2500009","qty":22,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKD2500005","qty":22,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":22,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKD2500009","qty":22,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKN2500007","qty":22,"abc":"d","ct_s":30.0},{"indeks":"PEPCAUTISO012","qty":10,"abc":"d","ct_s":16.987},{"indeks":"PEPCMPI540057","qty":5,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI530047","qty":38,"abc":"d","ct_s":55.376},{"indeks":"PEPCMRU030029","qty":26,"abc":"d","ct_s":47.371},{"indeks":"PEPCMPI540052","qty":34,"abc":"f","ct_s":0.0}],"2025-08-22":[{"indeks":"PEPCMPI540029","qty":10,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":10,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":10,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":14,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540069","qty":10,"abc":"c","ct_s":161.129},{"indeks":"PEPCAKU003","qty":180,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC251132","qty":3,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251125","qty":7,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":2,"abc":"d","ct_s":78.0},{"indeks":"PEPCLP1013","qty":132,"abc":"d","ct_s":3.075},{"indeks":"PEPCPQM7XX065","qty":4,"abc":"d","ct_s":0.0},{"indeks":"PEPCLORAS1008","qty":21,"abc":"d","ct_s":4.5},{"indeks":"PEPCMPI536016","qty":10,"abc":"d","ct_s":124.006},{"indeks":"PEPCMIC500012","qty":1,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC15K108","qty":1,"abc":"d","ct_s":159.03}],"2025-08-23":[{"indeks":"PEPCMIC500012","qty":20,"abc":"c","ct_s":7.5},{"indeks":"PEPCLKN2500019","qty":18,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":11,"abc":"d","ct_s":18.45},{"indeks":"PEPCMIC15K103","qty":20,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC500062","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU030021","qty":26,"abc":"d","ct_s":16.65},{"indeks":"PEPCMIC501081","qty":20,"abc":"d","ct_s":102.0},{"indeks":"PEPCMRU030027","qty":26,"abc":"d","ct_s":66.0},{"indeks":"PEPCMPI540052","qty":6,"abc":"f","ct_s":0.0}],"2025-08-25":[{"indeks":"PEPCWP0431001","qty":206,"abc":"b","ct_s":3.0},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC500062","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM750075","qty":4,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":4,"abc":"d","ct_s":5.0},{"indeks":"PEPCPQM750070","qty":4,"abc":"e","ct_s":20.7},{"indeks":"PEPCMPI540049","qty":40,"abc":"f","ct_s":0.0},{"indeks":"PEPCPQM750074","qty":4,"abc":"f","ct_s":0.0},{"indeks":"PEPCPQM7XX074","qty":1,"abc":"d","ct_s":4.89}],"2025-08-26":[{"indeks":"PEPCMPI540067","qty":16,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":20,"abc":"c","ct_s":122.309},{"indeks":"PEPCST0001004","qty":15,"abc":"d","ct_s":0.9},{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59},{"indeks":"PEPCEVSE10014","qty":3,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1004","qty":1,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1006","qty":1,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1015","qty":1,"abc":"f","ct_s":0.0}],"2025-08-27":[{"indeks":"PEPCMIC505014","qty":8,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K059","qty":38,"abc":"d","ct_s":1.133},{"indeks":"PEPCTKF012001","qty":12,"abc":"d","ct_s":13.457},{"indeks":"PEPCMIC250127","qty":37,"abc":"d","ct_s":25.318},{"indeks":"PEPCMIC250124","qty":37,"abc":"d","ct_s":48.567},{"indeks":"PEPCMZC320043","qty":28,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC500051","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI540PV005","qty":75,"abc":"d","ct_s":15.0},{"indeks":"PEPCMZC320045","qty":28,"abc":"d","ct_s":38.0},{"indeks":"PEPCMIC250113","qty":37,"abc":"d","ct_s":54.542},{"indeks":"PEPCMZC320027","qty":28,"abc":"d","ct_s":5.5},{"indeks":"PEPCIRM-AMB003","qty":64,"abc":"d","ct_s":0.613},{"indeks":"PEPCMMR650030","qty":18,"abc":"d","ct_s":45.0},{"indeks":"PEPCMIC500062","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCTKF012003","qty":36,"abc":"d","ct_s":2.1},{"indeks":"PEPCMIC10K060","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCEVSE10020","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCEVSE10024","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1014","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT2E1013","qty":1,"abc":"d","ct_s":69.533},{"indeks":"PEPCPVM1530055","qty":3,"abc":"d","ct_s":32.213}],"2025-08-28":[{"indeks":"PEPCMPI540033","qty":35,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":35,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X001","qty":109,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI540032","qty":35,"abc":"d","ct_s":0.0},{"indeks":"PEPCST0001004","qty":15,"abc":"d","ct_s":0.9},{"indeks":"PEPCIRM1006","qty":99,"abc":"d","ct_s":49.616},{"indeks":"PEPCMIC251132","qty":23,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251134","qty":24,"abc":"d","ct_s":78.0},{"indeks":"PEPCIRM1007","qty":100,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":100,"abc":"d","ct_s":0.0}],"2025-09-01":[{"indeks":"PEPCMPI50X003","qty":90,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540060","qty":42,"abc":"d","ct_s":0.0},{"indeks":"PEPCMZC320039","qty":28,"abc":"d","ct_s":1.125}],"2025-09-02":[{"indeks":"PEPCMIC505014","qty":10,"abc":"c","ct_s":8.14},{"indeks":"PEPCST0001004","qty":7,"abc":"d","ct_s":0.9},{"indeks":"PEPCMIC251125","qty":19,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC505023","qty":18,"abc":"d","ct_s":95.46},{"indeks":"PEPCTKF013003","qty":50,"abc":"d","ct_s":24.338},{"indeks":"PEPCLORAS1008","qty":77,"abc":"d","ct_s":4.5},{"indeks":"PEPCMZC20E004","qty":30,"abc":"e","ct_s":31.6},{"indeks":"PEPCMICSE005","qty":30,"abc":"e","ct_s":44.28}],"2025-09-03":[{"indeks":"PEPCMIC10013","qty":50,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC505023","qty":1,"abc":"d","ct_s":95.46},{"indeks":"PEPCEVSE10027","qty":26,"abc":"f","ct_s":0.0}],"2025-09-04":[{"indeks":"PEPCIMX61D002","qty":28,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC505014","qty":38,"abc":"c","ct_s":8.14},{"indeks":"PEPCMRU10003","qty":41,"abc":"c","ct_s":3.633},{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCMRU10006","qty":41,"abc":"d","ct_s":16.45},{"indeks":"PEPCMRU11002","qty":41,"abc":"d","ct_s":39.825},{"indeks":"PEPCTDR420006","qty":15,"abc":"d","ct_s":40.92},{"indeks":"PEPCPAT9X025","qty":1,"abc":"d","ct_s":14.01},{"indeks":"PEPCMIC10K047","qty":3,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K050","qty":2,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC10K052","qty":6,"abc":"d","ct_s":0.0}],"2025-09-05":[{"indeks":"PEPCMIC10013","qty":51,"abc":"c","ct_s":93.157},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCMIC501072","qty":1,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC10K050","qty":36,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC10K052","qty":32,"abc":"d","ct_s":0.0},{"indeks":"PEPCEVSE10027","qty":4,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI540049","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCAUTISO034","qty":8,"abc":"f","ct_s":0.0}],"2025-09-08":[{"indeks":"PEPCMPI540029","qty":35,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI502F006","qty":1,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":5,"abc":"c","ct_s":45.0},{"indeks":"PEPCMMR650007","qty":18,"abc":"d","ct_s":128.585},{"indeks":"PEPCMMR640001","qty":10,"abc":"d","ct_s":41.4},{"indeks":"PEPCMPI540049","qty":35,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI540052","qty":35,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1024","qty":30,"abc":"f","ct_s":0.0}],"2025-09-09":[{"indeks":"PEPCMIC10K047","qty":30,"abc":"d","ct_s":74.025},{"indeks":"PEPCTKF012001","qty":16,"abc":"d","ct_s":13.457},{"indeks":"PEPCMMR650033","qty":9,"abc":"d","ct_s":3.0},{"indeks":"PEPCMPI536011","qty":1,"abc":"e","ct_s":0.0},{"indeks":"PEPCPQM750068","qty":4,"abc":"e","ct_s":111.0},{"indeks":"PEPCPQM750082","qty":4,"abc":"e","ct_s":10.5},{"indeks":"PEPCPQM7XX077","qty":100,"abc":"e","ct_s":8.501}],"2025-09-10":[{"indeks":"PEPCMPI540029","qty":41,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":41,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":10,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":6,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI50X001","qty":9,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":78,"abc":"c","ct_s":54.555},{"indeks":"PEPCPAT86055","qty":17,"abc":"c","ct_s":30.0},{"indeks":"PEPCMPI540032","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCBATMAN001","qty":102,"abc":"d","ct_s":0.0},{"indeks":"PEPCERP1006","qty":10,"abc":"d","ct_s":23.088},{"indeks":"PEPCIRM-AMB003","qty":1,"abc":"d","ct_s":0.613},{"indeks":"PEPCMPI535027","qty":10,"abc":"d","ct_s":169.141},{"indeks":"PEPCAUTISO012","qty":22,"abc":"d","ct_s":16.987},{"indeks":"PEPCEVSE01008","qty":1,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":30,"abc":"d","ct_s":34.05},{"indeks":"PEPCSMARTTDR003","qty":4,"abc":"d","ct_s":14.1},{"indeks":"PEPCMRU200GPS025","qty":14,"abc":"d","ct_s":120.0},{"indeks":"PEPCTKF012003","qty":1,"abc":"d","ct_s":2.1},{"indeks":"PEPCMPI536003","qty":29,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI536011","qty":34,"abc":"e","ct_s":0.0},{"indeks":"PEPCEVSE10031","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPIMP1019","qty":30,"abc":"f","ct_s":0.0},{"indeks":"PEPCIMX62D003","qty":1,"abc":"d","ct_s":38.16}],"2025-09-11":[{"indeks":"PEPCMRU120014","qty":9,"abc":"c","ct_s":92.304},{"indeks":"PEPCTDR420006","qty":23,"abc":"d","ct_s":40.92},{"indeks":"PEPCMPIMP1021","qty":30,"abc":"f","ct_s":0.0}],"2025-09-12":[{"indeks":"PEPCMPI50X001","qty":50,"abc":"c","ct_s":71.252},{"indeks":"PEPCMIC501052","qty":40,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC501075","qty":40,"abc":"d","ct_s":26.253},{"indeks":"PEPCMIC251128","qty":26,"abc":"d","ct_s":92.064}],"2025-09-15":[{"indeks":"PEPCMPI540029","qty":3,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":3,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":4,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":10,"abc":"c","ct_s":122.309},{"indeks":"PEPCLKD2500007","qty":54,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC501072","qty":39,"abc":"d","ct_s":62.567},{"indeks":"PEPCMPI540032","qty":14,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500001","qty":54,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKD2500005","qty":18,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKD2500009","qty":18,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKD2500012","qty":2,"abc":"e","ct_s":0.0},{"indeks":"PEPCMPI536003","qty":5,"abc":"e","ct_s":0.0},{"indeks":"PEPCMIC15K108","qty":1,"abc":"d","ct_s":159.03}],"2025-09-16":[{"indeks":"PEPCMIC10K047","qty":5,"abc":"d","ct_s":74.025},{"indeks":"PEPCPAT9X025","qty":21,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":21,"abc":"d","ct_s":22.98},{"indeks":"PEPCEVSE01008","qty":35,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU200GPS025","qty":20,"abc":"d","ct_s":120.0},{"indeks":"PEPCMPI540057","qty":28,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI536011","qty":1,"abc":"e","ct_s":0.0},{"indeks":"PEPCVIPER5022","qty":1,"abc":"d","ct_s":4.7}],"2025-09-17":[{"indeks":"PEPCMPI540029","qty":18,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":50,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":50,"abc":"b","ct_s":13.953},{"indeks":"PEPCMLORA001","qty":32,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":27,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":27,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540032","qty":50,"abc":"d","ct_s":0.0},{"indeks":"PEPCAUTISO020","qty":30,"abc":"d","ct_s":16.0},{"indeks":"PEPCIRM1002","qty":80,"abc":"d","ct_s":0.0},{"indeks":"PEPCSMARTTDR001","qty":25,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":46,"abc":"d","ct_s":14.1},{"indeks":"PEPCPVM1530055","qty":1,"abc":"d","ct_s":32.213}],"2025-09-18":[{"indeks":"PEPCMPI540029","qty":23,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":23,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":23,"abc":"b","ct_s":13.953},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCMPI540032","qty":23,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC15K020","qty":4,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC15K108","qty":4,"abc":"d","ct_s":159.03},{"indeks":"PEPCMIC15K024","qty":6,"abc":"d","ct_s":94.282},{"indeks":"PEPCMPI536008","qty":34,"abc":"e","ct_s":0.0}],"2025-09-19":[{"indeks":"PEPCWP0431001","qty":150,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI502F006","qty":14,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":10,"abc":"c","ct_s":45.0},{"indeks":"PEPCPAT86055","qty":4,"abc":"c","ct_s":30.0},{"indeks":"PEPCLKN2500019","qty":18,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":18,"abc":"d","ct_s":18.45},{"indeks":"PEPCPAT9X012","qty":21,"abc":"d","ct_s":39.0},{"indeks":"PEPCLKN2500009","qty":18,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKN2010011","qty":18,"abc":"d","ct_s":3.0},{"indeks":"PEPCPAT96008","qty":21,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":21,"abc":"d","ct_s":81.063},{"indeks":"PEPCLKN2500007","qty":18,"abc":"d","ct_s":30.0},{"indeks":"PEPCPAT96006","qty":21,"abc":"d","ct_s":44.28},{"indeks":"PEPCLKD2500012","qty":16,"abc":"e","ct_s":0.0}],"2025-09-23":[{"indeks":"PEPCMPI540060","qty":50,"abc":"d","ct_s":0.0}],"2025-09-24":[{"indeks":"PEPCMPI520016","qty":55,"abc":"c","ct_s":156.518},{"indeks":"PEPCTKF012001","qty":24,"abc":"d","ct_s":13.457},{"indeks":"PEPCIRM1006","qty":79,"abc":"d","ct_s":49.616},{"indeks":"PEPCMMR650053","qty":1,"abc":"d","ct_s":54.545},{"indeks":"PEPCMIC251132","qty":34,"abc":"d","ct_s":16.363},{"indeks":"PEPCMPI540PV005","qty":31,"abc":"d","ct_s":15.0},{"indeks":"PEPCMIC251125","qty":34,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":34,"abc":"d","ct_s":78.0},{"indeks":"PEPCMMR650061","qty":24,"abc":"d","ct_s":1.104},{"indeks":"PEPCSMARTTDR001","qty":25,"abc":"d","ct_s":30.906},{"indeks":"PEPCMPI540057","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM707015","qty":27,"abc":"d","ct_s":173.5},{"indeks":"PEPCMPI50X003","qty":1,"abc":"c","ct_s":54.555},{"indeks":"PEPCMRU200010","qty":5,"abc":"f","ct_s":0.0}],"2025-09-25":[{"indeks":"PEPCMPI540060","qty":23,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC15K020","qty":25,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC251128","qty":34,"abc":"d","ct_s":92.064},{"indeks":"PEPCPVM1530070","qty":154,"abc":"d","ct_s":0.309},{"indeks":"PEPCMIC30013","qty":20,"abc":"d","ct_s":90.0},{"indeks":"PEPCMPI535023","qty":23,"abc":"e","ct_s":0.0}],"2025-09-26":[{"indeks":"PEPCIMX61D002","qty":12,"abc":"b","ct_s":25.59},{"indeks":"PEPCMRU120014","qty":44,"abc":"c","ct_s":92.304},{"indeks":"PEPCBATMAN001","qty":500,"abc":"d","ct_s":0.0},{"indeks":"PEPCERP1006","qty":20,"abc":"d","ct_s":23.088},{"indeks":"PEPCMIC15K108","qty":25,"abc":"d","ct_s":159.03},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0},{"indeks":"PEPCMRU21004","qty":33,"abc":"d","ct_s":75.0}],"2025-09-29":[{"indeks":"PEPCMLORA001","qty":48,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC501052","qty":40,"abc":"c","ct_s":42.86},{"indeks":"PEPCMZC320045","qty":42,"abc":"d","ct_s":38.0},{"indeks":"PEPCERP1006","qty":8,"abc":"d","ct_s":23.088},{"indeks":"PEPCMMR650051","qty":12,"abc":"d","ct_s":18.355},{"indeks":"PEPCMZC320027","qty":42,"abc":"d","ct_s":5.5},{"indeks":"PEPCLKN720007","qty":34,"abc":"d","ct_s":35.53},{"indeks":"PEPCIRM1007","qty":80,"abc":"d","ct_s":10.713},{"indeks":"PEPCMIC15K024","qty":23,"abc":"d","ct_s":94.282},{"indeks":"PEPCLKO720011","qty":34,"abc":"d","ct_s":49.727},{"indeks":"PEPCLKO720017","qty":34,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKN720016","qty":33,"abc":"d","ct_s":27.953},{"indeks":"PEPCLKN720009","qty":34,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":34,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKO720012","qty":34,"abc":"d","ct_s":23.691},{"indeks":"PEPCLKN720008","qty":34,"abc":"f","ct_s":0.0}],"2025-09-30":[{"indeks":"PEPCMIC501072","qty":40,"abc":"d","ct_s":62.567},{"indeks":"PEPCTKF012001","qty":26,"abc":"d","ct_s":13.457},{"indeks":"PEPCMZC320043","qty":42,"abc":"d","ct_s":84.704},{"indeks":"PEPCMMR650053","qty":11,"abc":"d","ct_s":54.545},{"indeks":"PEPCMIC501075","qty":36,"abc":"d","ct_s":26.253},{"indeks":"PEPCMMR650055","qty":12,"abc":"d","ct_s":59.0},{"indeks":"PEPCMMR650061","qty":96,"abc":"d","ct_s":1.104},{"indeks":"PEPCMMR670019","qty":12,"abc":"d","ct_s":45.0},{"indeks":"PEPCMZC310006","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1530074","qty":35,"abc":"d","ct_s":27.514},{"indeks":"PEPCPVM1530057","qty":35,"abc":"e","ct_s":15.6}],"2025-10-01":[{"indeks":"PEPCWP0431001","qty":5,"abc":"b","ct_s":3.0},{"indeks":"PEPCST0001004","qty":20,"abc":"d","ct_s":0.9},{"indeks":"PEPCMZC320039","qty":42,"abc":"d","ct_s":1.125},{"indeks":"PEPCMMR650061","qty":16,"abc":"d","ct_s":1.104},{"indeks":"PEPCPVM1530055","qty":35,"abc":"d","ct_s":32.213},{"indeks":"PEPCPVM1530068","qty":37,"abc":"d","ct_s":12.667},{"indeks":"PEPCPVM1530039","qty":35,"abc":"e","ct_s":15.686},{"indeks":"PEPCPVM1530062","qty":35,"abc":"e","ct_s":12.0},{"indeks":"PEPCPVM1530076","qty":35,"abc":"e","ct_s":102.0},{"indeks":"PEPCNAVI001","qty":5,"abc":"f","ct_s":0.0},{"indeks":"PEPCNAVI003","qty":5,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT86055","qty":1,"abc":"c","ct_s":30.0},{"indeks":"PEPCMLORA001","qty":2,"abc":"c","ct_s":4.666}],"2025-10-02":[{"indeks":"PEPCMPI50X001","qty":57,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":56,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI502F006","qty":14,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":16,"abc":"c","ct_s":45.0},{"indeks":"PEPCMRU10003","qty":27,"abc":"c","ct_s":3.633},{"indeks":"PEPCMIC250127","qty":45,"abc":"d","ct_s":25.318},{"indeks":"PEPCBATMAN001","qty":52,"abc":"d","ct_s":0.0},{"indeks":"PEPCIRM1006","qty":113,"abc":"d","ct_s":49.616},{"indeks":"PEPCMIC250124","qty":45,"abc":"d","ct_s":48.567},{"indeks":"PEPCMIC250113","qty":45,"abc":"d","ct_s":54.542},{"indeks":"PEPCIRM1007","qty":4,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":10,"abc":"d","ct_s":0.0},{"indeks":"PEPCLORAS1008","qty":90,"abc":"d","ct_s":4.5},{"indeks":"PEPCVIPER5022","qty":1,"abc":"d","ct_s":4.7},{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59}],"2025-10-03":[{"indeks":"PEPCMPI540029","qty":63,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":63,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":9,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC10013","qty":50,"abc":"c","ct_s":93.157},{"indeks":"PEPCMRU10003","qty":25,"abc":"c","ct_s":3.633},{"indeks":"PEPCMPI540032","qty":63,"abc":"d","ct_s":0.0},{"indeks":"PEPCIMX62D003","qty":17,"abc":"d","ct_s":38.16},{"indeks":"PEPCAKU003","qty":45,"abc":"d","ct_s":3.334},{"indeks":"PEPCLKD2500005","qty":29,"abc":"d","ct_s":3.185},{"indeks":"PEPCMMR650033","qty":43,"abc":"d","ct_s":3.0},{"indeks":"PEPCMRU10006","qty":37,"abc":"d","ct_s":16.45},{"indeks":"PEPCMRU11010","qty":25,"abc":"d","ct_s":12.686},{"indeks":"PEPCMPI536003","qty":23,"abc":"e","ct_s":0.0},{"indeks":"PEPCPAT9X020","qty":1,"abc":"d","ct_s":81.063}],"2025-10-06":[{"indeks":"PEPCMLORA001","qty":113,"abc":"c","ct_s":4.666},{"indeks":"PEPCMRU10003","qty":10,"abc":"c","ct_s":3.633},{"indeks":"PEPCMMR650007","qty":11,"abc":"d","ct_s":128.585},{"indeks":"PEPCIRM1006","qty":1,"abc":"d","ct_s":49.616},{"indeks":"PEPCMMR650020","qty":13,"abc":"d","ct_s":29.175},{"indeks":"PEPCMMR650030","qty":9,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU12004","qty":25,"abc":"d","ct_s":45.0},{"indeks":"PEPCMMR670015","qty":14,"abc":"d","ct_s":80.6},{"indeks":"PEPCMRU11002","qty":37,"abc":"d","ct_s":39.825},{"indeks":"PEPCPVM1530039","qty":1,"abc":"e","ct_s":15.686}],"2025-10-07":[{"indeks":"PEPCMIC10013","qty":55,"abc":"c","ct_s":93.157},{"indeks":"PEPCEVSE01016","qty":52,"abc":"d","ct_s":7.5},{"indeks":"PEPCPVM1530080","qty":30,"abc":"d","ct_s":66.669},{"indeks":"PEPCPVM1530064","qty":35,"abc":"e","ct_s":76.6},{"indeks":"PEPCMPI536008","qty":23,"abc":"e","ct_s":0.0}],"2025-10-08":[{"indeks":"PEPCMPI540029","qty":28,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":28,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":28,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI502F006","qty":44,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC500012","qty":29,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI502F008","qty":42,"abc":"c","ct_s":45.0},{"indeks":"PEPCST0001004","qty":2,"abc":"d","ct_s":0.9},{"indeks":"PEPCIMX62D003","qty":11,"abc":"d","ct_s":38.16},{"indeks":"PEPCLKD2500001","qty":87,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC15K105","qty":29,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500015","qty":29,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI540057","qty":56,"abc":"d","ct_s":0.0},{"indeks":"PEPCPVM1530080","qty":5,"abc":"d","ct_s":66.669},{"indeks":"PEPCMPI536011","qty":23,"abc":"e","ct_s":0.0},{"indeks":"PEPCLKO2500033","qty":29,"abc":"f","ct_s":0.0}],"2025-10-09":[{"indeks":"PEPCLKD2500007","qty":87,"abc":"c","ct_s":13.332},{"indeks":"PEPCPAT2E1003","qty":10,"abc":"c","ct_s":9.0},{"indeks":"PEPCMIC250127","qty":29,"abc":"d","ct_s":25.318},{"indeks":"PEPCPAT2E1013","qty":10,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC250124","qty":29,"abc":"d","ct_s":48.567},{"indeks":"PEPCLKN2500019","qty":29,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":29,"abc":"d","ct_s":18.45},{"indeks":"PEPCMIC15K103","qty":29,"abc":"d","ct_s":57.186},{"indeks":"PEPCLKN2500009","qty":29,"abc":"d","ct_s":5.289},{"indeks":"PEPCMPI540PV005","qty":83,"abc":"d","ct_s":15.0},{"indeks":"PEPCLKN2010011","qty":29,"abc":"d","ct_s":3.0},{"indeks":"PEPCMIC250113","qty":29,"abc":"d","ct_s":54.542},{"indeks":"PEPCLKN2500007","qty":29,"abc":"d","ct_s":30.0},{"indeks":"PEPCAUTISO020","qty":70,"abc":"d","ct_s":16.0}],"2025-10-10":[{"indeks":"PEPCMPI520016","qty":40,"abc":"c","ct_s":156.518},{"indeks":"PEPCIRM1006","qty":10,"abc":"d","ct_s":49.616}],"2025-10-13":[{"indeks":"PEPCWP0431001","qty":200,"abc":"b","ct_s":3.0},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCAUTISO012","qty":29,"abc":"d","ct_s":16.987},{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59},{"indeks":"PEPCPAT86055","qty":1,"abc":"c","ct_s":30.0}],"2025-10-14":[{"indeks":"PEPCMPI540029","qty":39,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":39,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":107,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":40,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":10,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X003","qty":26,"abc":"c","ct_s":54.555},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540060","qty":41,"abc":"d","ct_s":0.0},{"indeks":"PEPCIRM1007","qty":119,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":113,"abc":"d","ct_s":0.0}],"2025-10-15":[{"indeks":"PEPCWP0431001","qty":200,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI50X001","qty":25,"abc":"c","ct_s":71.252},{"indeks":"PEPCERP1006","qty":12,"abc":"d","ct_s":23.088},{"indeks":"PEPCPAT12E001","qty":10,"abc":"d","ct_s":7.6},{"indeks":"PEPCMMR670015","qty":1,"abc":"d","ct_s":80.6}],"2025-10-16":[{"indeks":"PEPCMPI540029","qty":30,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":30,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":30,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":28,"abc":"c","ct_s":122.309},{"indeks":"PEPCPAT2E1010","qty":10,"abc":"c","ct_s":92.862},{"indeks":"PEPCST0001004","qty":28,"abc":"d","ct_s":0.9},{"indeks":"PEPCIMX62D003","qty":30,"abc":"d","ct_s":38.16},{"indeks":"PEPCAKU003","qty":115,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC501075","qty":4,"abc":"d","ct_s":26.253},{"indeks":"PEPCMPI535027","qty":28,"abc":"d","ct_s":169.141},{"indeks":"PEPCMPI536014","qty":11,"abc":"d","ct_s":161.133},{"indeks":"PEPCMZC20E004","qty":44,"abc":"e","ct_s":31.6},{"indeks":"PEPCOR1000008","qty":43,"abc":"e","ct_s":4.3},{"indeks":"PEPCMICRS3007","qty":4,"abc":"e","ct_s":20.55}],"2025-10-17":[{"indeks":"PEPCMPI530015","qty":64,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540065","qty":39,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC501052","qty":4,"abc":"c","ct_s":42.86},{"indeks":"PEPCMPI540069","qty":39,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC501072","qty":4,"abc":"d","ct_s":62.567},{"indeks":"PEPCMRU21004","qty":20,"abc":"d","ct_s":75.0}],"2025-10-18":[{"indeks":"PEPCLKD2500007","qty":3,"abc":"c","ct_s":13.332}],"2025-10-20":[{"indeks":"PEPCMRU200GPS025","qty":19,"abc":"d","ct_s":120.0},{"indeks":"PEPCMPI536014","qty":19,"abc":"d","ct_s":161.133},{"indeks":"PEPCMPI536016","qty":30,"abc":"d","ct_s":124.006},{"indeks":"PEPCMPI540060","qty":1,"abc":"d","ct_s":0.0}],"2025-10-21":[{"indeks":"PEPCMPI540029","qty":64,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":64,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540065","qty":64,"abc":"c","ct_s":122.309},{"indeks":"PEPCLKN720016","qty":44,"abc":"d","ct_s":27.953},{"indeks":"PEPCLKN720009","qty":43,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":43,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKO720012","qty":36,"abc":"d","ct_s":23.691},{"indeks":"PEPCPQM707015","qty":30,"abc":"d","ct_s":173.5},{"indeks":"PEPCPQM750074","qty":1,"abc":"f","ct_s":0.0},{"indeks":"PEPCPQM750076","qty":1,"abc":"f","ct_s":0.0},{"indeks":"PEPCMIC15K020","qty":1,"abc":"d","ct_s":73.332}],"2025-10-22":[{"indeks":"PEPCIMX61D002","qty":22,"abc":"b","ct_s":25.59},{"indeks":"PEPCLKN720007","qty":43,"abc":"d","ct_s":35.53},{"indeks":"PEPCMMR650030","qty":11,"abc":"d","ct_s":45.0},{"indeks":"PEPCLKO720011","qty":36,"abc":"d","ct_s":49.727},{"indeks":"PEPCLKO720017","qty":36,"abc":"d","ct_s":29.03},{"indeks":"PEPCPVM1530070","qty":68,"abc":"d","ct_s":0.309},{"indeks":"PEPCLKN720019","qty":43,"abc":"d","ct_s":22.504},{"indeks":"PEPCPVM1530055","qty":34,"abc":"d","ct_s":32.213},{"indeks":"PEPCPVM1530080","qty":34,"abc":"d","ct_s":66.669},{"indeks":"PEPCPQM750075","qty":1,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":1,"abc":"d","ct_s":5.0},{"indeks":"PEPCPVM1530068","qty":34,"abc":"d","ct_s":12.667},{"indeks":"PEPCPVM1530074","qty":34,"abc":"d","ct_s":27.514},{"indeks":"PEPCPVM1530039","qty":34,"abc":"e","ct_s":15.686},{"indeks":"PEPCPVM1530057","qty":34,"abc":"e","ct_s":15.6},{"indeks":"PEPCPVM1530062","qty":34,"abc":"e","ct_s":12.0},{"indeks":"PEPCPVM1530076","qty":34,"abc":"e","ct_s":102.0},{"indeks":"PEPCPVM1530064","qty":34,"abc":"e","ct_s":76.6},{"indeks":"PEPCPQM750092","qty":5,"abc":"f","ct_s":0.0},{"indeks":"PEPCPQM750072","qty":5,"abc":"f","ct_s":0.0}],"2025-10-23":[{"indeks":"PEPCWP0431001","qty":103,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540067","qty":64,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI520016","qty":11,"abc":"c","ct_s":156.518},{"indeks":"PEPCPQM7XX074","qty":20,"abc":"d","ct_s":4.89},{"indeks":"PEPCLKO720020","qty":36,"abc":"d","ct_s":7.2},{"indeks":"PEPCPVM1530070","qty":56,"abc":"d","ct_s":0.309},{"indeks":"PEPCAUTISO032","qty":10,"abc":"e","ct_s":15.936}],"2025-10-24":[{"indeks":"PEPCMIC251132","qty":42,"abc":"d","ct_s":16.363},{"indeks":"PEPCMIC251125","qty":42,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":42,"abc":"d","ct_s":78.0},{"indeks":"PEPCMIC251128","qty":42,"abc":"d","ct_s":92.064},{"indeks":"PEPCMRU200029","qty":24,"abc":"d","ct_s":116.15},{"indeks":"PEPCPQM700027","qty":3,"abc":"d","ct_s":15.99},{"indeks":"PEPCMRU030021","qty":17,"abc":"d","ct_s":16.65},{"indeks":"PEPCMRU030029","qty":17,"abc":"d","ct_s":47.371},{"indeks":"PEPCPQM750075","qty":4,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":4,"abc":"d","ct_s":5.0},{"indeks":"PEPCPQM750070","qty":5,"abc":"e","ct_s":20.7},{"indeks":"PEPCRFM12001","qty":2,"abc":"f","ct_s":1.566}],"2025-10-25":[{"indeks":"PEPCMIC501052","qty":1,"abc":"c","ct_s":42.86}],"2025-10-27":[{"indeks":"PEPCMLORA001","qty":1,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540069","qty":64,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC501072","qty":60,"abc":"d","ct_s":62.567},{"indeks":"PEPCMMR650061","qty":36,"abc":"d","ct_s":1.104},{"indeks":"PEPCPQM7XX071","qty":20,"abc":"d","ct_s":15.0},{"indeks":"PEPCMPI536018","qty":30,"abc":"d","ct_s":21.171},{"indeks":"PEPCPQM7XX065","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU030027","qty":17,"abc":"d","ct_s":66.0},{"indeks":"PEPCMPI502028","qty":10,"abc":"f","ct_s":0.0}],"2025-10-28":[{"indeks":"PEPCWP0431001","qty":97,"abc":"b","ct_s":3.0},{"indeks":"PEPCMIC501052","qty":59,"abc":"c","ct_s":42.86},{"indeks":"PEPCMMR650007","qty":22,"abc":"d","ct_s":128.585},{"indeks":"PEPCPQM7XX052","qty":20,"abc":"d","ct_s":127.403},{"indeks":"PEPCMMR650061","qty":4,"abc":"d","ct_s":1.104},{"indeks":"PEPCMMR640001","qty":11,"abc":"d","ct_s":41.4},{"indeks":"PEPCMRU21004","qty":40,"abc":"d","ct_s":75.0},{"indeks":"PEPCMRP201007","qty":19,"abc":"d","ct_s":85.013}],"2025-10-29":[{"indeks":"PEPCWP0431001","qty":20,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI502F006","qty":12,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":29,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI502F008","qty":14,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC505014","qty":28,"abc":"c","ct_s":8.14},{"indeks":"PEPCMPI520016","qty":45,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC10K059","qty":28,"abc":"d","ct_s":1.133},{"indeks":"PEPCBATMAN001","qty":152,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC501075","qty":60,"abc":"d","ct_s":26.253},{"indeks":"PEPCMIC15K020","qty":40,"abc":"d","ct_s":73.332},{"indeks":"PEPCLORAS1008","qty":130,"abc":"d","ct_s":4.5},{"indeks":"PEPCGEOPRO003","qty":15,"abc":"f","ct_s":0.0},{"indeks":"PEPCMPI540060","qty":1,"abc":"d","ct_s":0.0}],"2025-10-30":[{"indeks":"PEPCMIC500012","qty":40,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC501052","qty":1,"abc":"c","ct_s":42.86},{"indeks":"PEPCMMR650053","qty":13,"abc":"d","ct_s":54.545},{"indeks":"PEPCMMR650051","qty":13,"abc":"d","ct_s":18.355},{"indeks":"PEPCMIC10K052","qty":2,"abc":"d","ct_s":0.0}],"2025-10-31":[{"indeks":"PEPCMIC10013","qty":70,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC10K050","qty":28,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC10K052","qty":28,"abc":"d","ct_s":0.0},{"indeks":"PEPCMICSE005","qty":30,"abc":"e","ct_s":44.28}],"2025-11-03":[{"indeks":"PEPCMPI502F006","qty":11,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":1,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI502F008","qty":9,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC10K047","qty":28,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC15K103","qty":40,"abc":"d","ct_s":57.186},{"indeks":"PEPCMPI540PV005","qty":48,"abc":"d","ct_s":15.0},{"indeks":"PEPCMIC15K108","qty":40,"abc":"d","ct_s":159.03},{"indeks":"PEPCMMR650055","qty":13,"abc":"d","ct_s":59.0},{"indeks":"PEPCMIC505023","qty":2,"abc":"d","ct_s":95.46},{"indeks":"PEPCTDR420006","qty":50,"abc":"d","ct_s":40.92},{"indeks":"PEPCMMR650059","qty":1,"abc":"d","ct_s":49.8},{"indeks":"PEPCMRP201007","qty":19,"abc":"d","ct_s":85.013},{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59}],"2025-11-04":[{"indeks":"PEPCMPI50X001","qty":46,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":46,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI502F006","qty":19,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":49,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI502F008","qty":20,"abc":"c","ct_s":45.0},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCTKF012001","qty":79,"abc":"d","ct_s":13.457},{"indeks":"PEPCMIC250127","qty":24,"abc":"d","ct_s":25.318},{"indeks":"PEPCMMR650020","qty":13,"abc":"d","ct_s":29.175},{"indeks":"PEPCMZC320043","qty":15,"abc":"d","ct_s":84.704},{"indeks":"PEPCMZC320045","qty":15,"abc":"d","ct_s":38.0},{"indeks":"PEPCMIC250113","qty":24,"abc":"d","ct_s":54.542},{"indeks":"PEPCMZC320027","qty":15,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":15,"abc":"d","ct_s":1.125},{"indeks":"PEPCVIPER5022","qty":34,"abc":"d","ct_s":4.7},{"indeks":"PEPCAUTISO012","qty":14,"abc":"d","ct_s":16.987},{"indeks":"PEPCMIC15K024","qty":40,"abc":"d","ct_s":94.282},{"indeks":"PEPCMIC15K105","qty":40,"abc":"d","ct_s":0.0},{"indeks":"PEPCTKF013003","qty":61,"abc":"d","ct_s":24.338},{"indeks":"PEPCMIC30013","qty":24,"abc":"d","ct_s":90.0}],"2025-11-05":[{"indeks":"PEPCMPI540029","qty":40,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":40,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":40,"abc":"b","ct_s":13.953},{"indeks":"PEPCMMR650059","qty":13,"abc":"d","ct_s":49.8},{"indeks":"PEPCMZC20E004","qty":25,"abc":"e","ct_s":31.6},{"indeks":"PEPCRFM12001","qty":1,"abc":"f","ct_s":1.566},{"indeks":"PEPCPQM750087","qty":10,"abc":"f","ct_s":11.826},{"indeks":"PEPCPQM750089","qty":10,"abc":"f","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":13,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC15K103","qty":1,"abc":"d","ct_s":57.186}],"2025-11-06":[{"indeks":"PEPCWP0431001","qty":274,"abc":"b","ct_s":3.0},{"indeks":"PEPCTKF012001","qty":19,"abc":"d","ct_s":13.457},{"indeks":"PEPCTKF012003","qty":57,"abc":"d","ct_s":2.1},{"indeks":"PEPCMIC500065","qty":2,"abc":"f","ct_s":36.579}],"2025-11-07":[{"indeks":"PEPCWP0431001","qty":15,"abc":"b","ct_s":3.0},{"indeks":"PEPCPQM7XX074","qty":1,"abc":"d","ct_s":4.89},{"indeks":"PEPCPQM7XX065","qty":1,"abc":"d","ct_s":0.0}],"2025-11-12":[{"indeks":"PEPCWP0431001","qty":8,"abc":"b","ct_s":3.0},{"indeks":"PEPCMIC250124","qty":24,"abc":"d","ct_s":48.567},{"indeks":"PEPCLKN720007","qty":50,"abc":"d","ct_s":35.53},{"indeks":"PEPCLKO720011","qty":50,"abc":"d","ct_s":49.727},{"indeks":"PEPCLKO720017","qty":48,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKN720016","qty":48,"abc":"d","ct_s":27.953},{"indeks":"PEPCMMR6XX001","qty":34,"abc":"d","ct_s":72.0},{"indeks":"PEPCLKN720009","qty":50,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":50,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKO720012","qty":50,"abc":"d","ct_s":23.691},{"indeks":"PEPCLKN720019","qty":50,"abc":"d","ct_s":22.504},{"indeks":"PEPCMMR650065","qty":13,"abc":"d","ct_s":51.729},{"indeks":"PEPCIRM1002","qty":1,"abc":"d","ct_s":0.0}],"2025-11-13":[{"indeks":"PEPCMPI540029","qty":75,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":75,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":6,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI530015","qty":75,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":50,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":40,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":47,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI540069","qty":15,"abc":"c","ct_s":161.129},{"indeks":"PEPCPAT2E1010","qty":9,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":9,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":9,"abc":"d","ct_s":69.533},{"indeks":"PEPCLKO720020","qty":50,"abc":"d","ct_s":7.2},{"indeks":"PEPCPQM707015","qty":45,"abc":"d","ct_s":173.5},{"indeks":"PEPCPAT12E001","qty":9,"abc":"d","ct_s":7.6},{"indeks":"PEPCMICRS3007","qty":16,"abc":"e","ct_s":20.55}],"2025-11-14":[{"indeks":"PEPCWP0431001","qty":20,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540067","qty":65,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI50X001","qty":35,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":35,"abc":"c","ct_s":54.555},{"indeks":"PEPCLKD2500007","qty":34,"abc":"c","ct_s":13.332},{"indeks":"PEPCLKD2500001","qty":90,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKO2500031","qty":2,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":10,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKD2500005","qty":30,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":1,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKD2500009","qty":30,"abc":"d","ct_s":4.291},{"indeks":"PEPCSMARTTDR001","qty":66,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":110,"abc":"d","ct_s":14.1}],"2025-11-17":[{"indeks":"PEPCIMX62D003","qty":45,"abc":"d","ct_s":38.16},{"indeks":"PEPCMPI535027","qty":40,"abc":"d","ct_s":169.141},{"indeks":"PEPCSMARTTDR001","qty":44,"abc":"d","ct_s":30.906},{"indeks":"PEPCLKD2500015","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC10K047","qty":1,"abc":"d","ct_s":74.025}],"2025-11-18":[{"indeks":"PEPCMPI540065","qty":75,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI540069","qty":25,"abc":"c","ct_s":161.129},{"indeks":"PEPCLKO2500031","qty":28,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":20,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKN2010011","qty":29,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKN2500007","qty":30,"abc":"d","ct_s":30.0}],"2025-11-19":[{"indeks":"PEPCMPI540029","qty":40,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":40,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":40,"abc":"b","ct_s":13.953},{"indeks":"PEPCLKD2500007","qty":56,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":35,"abc":"c","ct_s":161.129},{"indeks":"PEPCPAT86055","qty":18,"abc":"c","ct_s":30.0},{"indeks":"PEPCST0001004","qty":1,"abc":"d","ct_s":0.9},{"indeks":"PEPCAKU003","qty":60,"abc":"d","ct_s":3.334},{"indeks":"PEPCLP1013","qty":130,"abc":"d","ct_s":3.075},{"indeks":"PEPCPAT95005","qty":18,"abc":"f","ct_s":31.7},{"indeks":"PEPCPAT95007","qty":18,"abc":"f","ct_s":16.0},{"indeks":"PEPCTDR430007","qty":8,"abc":"f","ct_s":0.0},{"indeks":"PEPCTDR430009","qty":10,"abc":"f","ct_s":0.0}],"2025-11-20":[{"indeks":"PEPCMPI540029","qty":20,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":20,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":21,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X001","qty":52,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":52,"abc":"c","ct_s":54.555},{"indeks":"PEPCMIC501052","qty":16,"abc":"c","ct_s":42.86},{"indeks":"PEPCMPI520016","qty":25,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC501072","qty":16,"abc":"d","ct_s":62.567},{"indeks":"PEPCLKN2500019","qty":28,"abc":"d","ct_s":111.817},{"indeks":"PEPCPAT9X025","qty":18,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":18,"abc":"d","ct_s":22.98},{"indeks":"PEPCMPI536018","qty":20,"abc":"d","ct_s":21.171},{"indeks":"PEPCMRU200GPS025","qty":12,"abc":"d","ct_s":120.0},{"indeks":"PEPCMZC310006","qty":20,"abc":"d","ct_s":0.0}],"2025-11-21":[{"indeks":"PEPCWP0431001","qty":6,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":12,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI540067","qty":40,"abc":"c","ct_s":7.502},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":40,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC250127","qty":11,"abc":"d","ct_s":25.318},{"indeks":"PEPCPQM7XX052","qty":34,"abc":"d","ct_s":127.403},{"indeks":"PEPCAUTISO020","qty":38,"abc":"d","ct_s":16.0},{"indeks":"PEPCPQM7XX071","qty":34,"abc":"d","ct_s":15.0},{"indeks":"PEPCMMR650033","qty":33,"abc":"d","ct_s":3.0}],"2025-11-22":[{"indeks":"PEPCMPI540067","qty":20,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":40,"abc":"c","ct_s":122.309},{"indeks":"PEPCPAT9X012","qty":18,"abc":"d","ct_s":39.0},{"indeks":"PEPCPAT9X020","qty":18,"abc":"d","ct_s":81.063}],"2025-11-24":[{"indeks":"PEPCIMX61D002","qty":13,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI502F006","qty":2,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI536014","qty":20,"abc":"d","ct_s":161.133},{"indeks":"PEPCMPI536016","qty":20,"abc":"d","ct_s":124.006},{"indeks":"PEPCMRU030027","qty":23,"abc":"d","ct_s":66.0},{"indeks":"PEPCMRU030029","qty":23,"abc":"d","ct_s":47.371},{"indeks":"PEPCPQM7XX074","qty":1,"abc":"d","ct_s":4.89}],"2025-11-25":[{"indeks":"PEPCMPI502F006","qty":22,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC501052","qty":1,"abc":"c","ct_s":42.86},{"indeks":"PEPCMMR650007","qty":32,"abc":"d","ct_s":128.585},{"indeks":"PEPCIMX62D003","qty":2,"abc":"d","ct_s":38.16},{"indeks":"PEPCPQM7XX074","qty":34,"abc":"d","ct_s":4.89},{"indeks":"PEPCMMR640001","qty":15,"abc":"d","ct_s":41.4},{"indeks":"PEPCMPI530034","qty":21,"abc":"d","ct_s":80.005},{"indeks":"PEPCMRU21004","qty":51,"abc":"d","ct_s":75.0}],"2025-11-26":[{"indeks":"PEPCIMX61D002","qty":3,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC501052","qty":54,"abc":"c","ct_s":42.86},{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCPQM7XX052","qty":1,"abc":"d","ct_s":127.403},{"indeks":"PEPCPAT9X012","qty":10,"abc":"d","ct_s":39.0},{"indeks":"PEPCMMR650030","qty":15,"abc":"d","ct_s":45.0},{"indeks":"PEPCPQM7XX071","qty":29,"abc":"d","ct_s":15.0},{"indeks":"PEPCSMARTTDR001","qty":2,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":2,"abc":"d","ct_s":14.1},{"indeks":"PEPCMRU030021","qty":23,"abc":"d","ct_s":16.65},{"indeks":"PEPCMMR650065","qty":2,"abc":"d","ct_s":51.729},{"indeks":"PEPCPQM7XX077","qty":144,"abc":"e","ct_s":8.501},{"indeks":"PEPCERP1006","qty":2,"abc":"d","ct_s":23.088},{"indeks":"PEPCPAT2E1003","qty":1,"abc":"c","ct_s":9.0}],"2025-11-27":[{"indeks":"PEPCWP0431001","qty":44,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":12,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":42,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI502F008","qty":22,"abc":"c","ct_s":45.0},{"indeks":"PEPCPAT2E1003","qty":29,"abc":"c","ct_s":9.0},{"indeks":"PEPCMIC10K059","qty":25,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC250127","qty":49,"abc":"d","ct_s":25.318},{"indeks":"PEPCPAT2E1013","qty":31,"abc":"d","ct_s":69.533},{"indeks":"PEPCST0001004","qty":7,"abc":"d","ct_s":0.9},{"indeks":"PEPCBATMAN001","qty":100,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC250124","qty":60,"abc":"d","ct_s":48.567},{"indeks":"PEPCMMR650020","qty":12,"abc":"d","ct_s":29.175},{"indeks":"PEPCERP1006","qty":21,"abc":"d","ct_s":23.088},{"indeks":"PEPCMIC250113","qty":60,"abc":"d","ct_s":54.542},{"indeks":"PEPCPAT96008","qty":1,"abc":"d","ct_s":16.009},{"indeks":"PEPCMRU200029","qty":21,"abc":"d","ct_s":116.15},{"indeks":"PEPCPAT010011","qty":29,"abc":"d","ct_s":26.3},{"indeks":"PEPCPQM7XX065","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500009","qty":4,"abc":"d","ct_s":4.291}],"2025-11-28":[{"indeks":"PEPCMPI502F006","qty":31,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":31,"abc":"c","ct_s":45.0},{"indeks":"PEPCMRU10003","qty":19,"abc":"c","ct_s":3.633},{"indeks":"PEPCLKN2500019","qty":2,"abc":"d","ct_s":111.817},{"indeks":"PEPCMMR650033","qty":2,"abc":"d","ct_s":3.0},{"indeks":"PEPCMPI536018","qty":20,"abc":"d","ct_s":21.171}],"2025-11-29":[{"indeks":"PEPCMMR650030","qty":12,"abc":"d","ct_s":45.0}],"2025-12-01":[{"indeks":"PEPCWP0431001","qty":156,"abc":"b","ct_s":3.0},{"indeks":"PEPCPAT2E1010","qty":29,"abc":"c","ct_s":92.862},{"indeks":"PEPCPQM7XX052","qty":29,"abc":"d","ct_s":127.403},{"indeks":"PEPCPQM7XX067","qty":29,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKO720017","qty":2,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKN720016","qty":2,"abc":"d","ct_s":27.953},{"indeks":"PEPCMPI530047","qty":21,"abc":"d","ct_s":55.376}],"2025-12-02":[{"indeks":"PEPCMIC501072","qty":54,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC501075","qty":54,"abc":"d","ct_s":26.253},{"indeks":"PEPCMMR650051","qty":11,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":11,"abc":"d","ct_s":59.0},{"indeks":"PEPCPQM7XX074","qty":29,"abc":"d","ct_s":4.89},{"indeks":"PEPCPQM700029","qty":23,"abc":"d","ct_s":77.22},{"indeks":"PEPCPQM700012","qty":23,"abc":"d","ct_s":3.185},{"indeks":"PEPCMMR670019","qty":11,"abc":"d","ct_s":45.0},{"indeks":"PEPCPQM700027","qty":23,"abc":"d","ct_s":15.99},{"indeks":"PEPCLKO720011","qty":1,"abc":"d","ct_s":49.727}],"2025-12-03":[{"indeks":"PEPCMPI540029","qty":42,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":47,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":41,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":11,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI50X001","qty":32,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":32,"abc":"c","ct_s":54.555},{"indeks":"PEPCMMR650053","qty":11,"abc":"d","ct_s":54.545},{"indeks":"PEPCAKU003","qty":110,"abc":"d","ct_s":3.334},{"indeks":"PEPCMPI540PV005","qty":1,"abc":"d","ct_s":15.0},{"indeks":"PEPCMMR650061","qty":28,"abc":"d","ct_s":1.104},{"indeks":"PEPCMPI535027","qty":42,"abc":"d","ct_s":169.141},{"indeks":"PEPCMRU200029","qty":19,"abc":"d","ct_s":116.15},{"indeks":"PEPCIRM1002","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCMLORA001","qty":5,"abc":"c","ct_s":4.666}],"2025-12-04":[{"indeks":"PEPCWP0431001","qty":200,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540067","qty":42,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":95,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":74,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":73,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540065","qty":26,"abc":"c","ct_s":122.309},{"indeks":"PEPCMRU120014","qty":10,"abc":"c","ct_s":92.304},{"indeks":"PEPCPAT86055","qty":17,"abc":"c","ct_s":30.0},{"indeks":"PEPCST0001004","qty":58,"abc":"d","ct_s":0.9},{"indeks":"PEPCIRM1006","qty":95,"abc":"d","ct_s":49.616},{"indeks":"PEPCLKD2500001","qty":9,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKN2500019","qty":34,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":34,"abc":"d","ct_s":18.45},{"indeks":"PEPCPAT9X012","qty":17,"abc":"d","ct_s":39.0},{"indeks":"PEPCAKU003","qty":57,"abc":"d","ct_s":3.334},{"indeks":"PEPCLKN2500009","qty":34,"abc":"d","ct_s":5.289},{"indeks":"PEPCMIC251132","qty":20,"abc":"d","ct_s":16.363},{"indeks":"PEPCPAT9X025","qty":17,"abc":"d","ct_s":14.01},{"indeks":"PEPCLKD2500005","qty":34,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":34,"abc":"d","ct_s":3.0},{"indeks":"PEPCMIC251125","qty":20,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":20,"abc":"d","ct_s":78.0},{"indeks":"PEPCPAT96008","qty":17,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X016","qty":17,"abc":"d","ct_s":22.98},{"indeks":"PEPCPAT9X020","qty":17,"abc":"d","ct_s":81.063},{"indeks":"PEPCMIC251128","qty":20,"abc":"d","ct_s":92.064},{"indeks":"PEPCMMR650061","qty":116,"abc":"d","ct_s":1.104},{"indeks":"PEPCIRM1007","qty":95,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":95,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT96006","qty":17,"abc":"d","ct_s":44.28},{"indeks":"PEPCLKO2500033","qty":34,"abc":"f","ct_s":0.0}],"2025-12-05":[{"indeks":"PEPCMPI540029","qty":41,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":62,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":1,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540067","qty":30,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":57,"abc":"c","ct_s":122.309},{"indeks":"PEPCLKD2500007","qty":99,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC505014","qty":31,"abc":"c","ct_s":8.14},{"indeks":"PEPCMPI540069","qty":41,"abc":"c","ct_s":161.129},{"indeks":"PEPCMRU10003","qty":7,"abc":"c","ct_s":3.633},{"indeks":"PEPCMPI540PV005","qty":100,"abc":"d","ct_s":15.0},{"indeks":"PEPCLKN2500007","qty":34,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU10006","qty":26,"abc":"d","ct_s":16.45},{"indeks":"PEPCLKD2500015","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR670015","qty":11,"abc":"d","ct_s":80.6},{"indeks":"PEPCMRU11002","qty":26,"abc":"d","ct_s":39.825},{"indeks":"PEPCTDR420006","qty":25,"abc":"d","ct_s":40.92},{"indeks":"PEPCMRP201007","qty":10,"abc":"d","ct_s":85.013}],"2025-12-08":[{"indeks":"PEPCMPI50X003","qty":2,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI536018","qty":3,"abc":"d","ct_s":21.171}],"2025-12-09":[{"indeks":"PEPCLKD2500007","qty":2,"abc":"c","ct_s":13.332},{"indeks":"PEPCLKD2500001","qty":93,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC505023","qty":31,"abc":"d","ct_s":95.46},{"indeks":"PEPCMIC500062","qty":31,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC10K060","qty":31,"abc":"d","ct_s":0.0}],"2025-12-10":[{"indeks":"PEPCMPI540029","qty":74,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI530015","qty":48,"abc":"b","ct_s":13.953},{"indeks":"PEPCMIC500012","qty":42,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI520016","qty":55,"abc":"c","ct_s":156.518},{"indeks":"PEPCLKN720016","qty":50,"abc":"d","ct_s":27.953},{"indeks":"PEPCMIC500062","qty":42,"abc":"d","ct_s":0.0},{"indeks":"PEPCTDR430007","qty":2,"abc":"f","ct_s":0.0}],"2025-12-11":[{"indeks":"PEPCMPI540033","qty":48,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":14,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI540067","qty":26,"abc":"c","ct_s":7.502},{"indeks":"PEPCMIC10013","qty":47,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC505014","qty":25,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K047","qty":25,"abc":"d","ct_s":74.025},{"indeks":"PEPCAKU003","qty":52,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC10K050","qty":25,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC10K052","qty":25,"abc":"d","ct_s":0.0},{"indeks":"PEPCVIPER5022","qty":17,"abc":"d","ct_s":4.7},{"indeks":"PEPCLKO720017","qty":49,"abc":"d","ct_s":29.03},{"indeks":"PEPCMPI536018","qty":26,"abc":"d","ct_s":21.171},{"indeks":"PEPCMPI536014","qty":26,"abc":"d","ct_s":161.133},{"indeks":"PEPCMPI536016","qty":26,"abc":"d","ct_s":124.006},{"indeks":"PEPCGEOXTR003","qty":12,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT2E1003","qty":2,"abc":"c","ct_s":9.0},{"indeks":"PEPCMLORA001","qty":10,"abc":"c","ct_s":4.666}],"2025-12-12":[{"indeks":"PEPCAUTISO020","qty":37,"abc":"d","ct_s":16.0},{"indeks":"PEPCMPI525008","qty":40,"abc":"d","ct_s":144.0},{"indeks":"PEPCPQM750075","qty":2,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":2,"abc":"d","ct_s":5.0},{"indeks":"PEPCPQM750070","qty":2,"abc":"e","ct_s":20.7},{"indeks":"PEPCPQM750082","qty":2,"abc":"e","ct_s":10.5},{"indeks":"PEPCPQM750074","qty":2,"abc":"f","ct_s":0.0},{"indeks":"PEPCPQM750092","qty":1,"abc":"f","ct_s":0.0}],"2025-12-15":[{"indeks":"PEPCTKF012001","qty":50,"abc":"d","ct_s":13.457},{"indeks":"PEPCLKN720009","qty":50,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":50,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKN720019","qty":50,"abc":"d","ct_s":22.504},{"indeks":"PEPCMIC500055","qty":42,"abc":"d","ct_s":95.452},{"indeks":"PEPCMIC500049","qty":42,"abc":"d","ct_s":57.193},{"indeks":"PEPCRFM12002","qty":1,"abc":"f","ct_s":1.565},{"indeks":"PEPCMMR650020","qty":1,"abc":"d","ct_s":29.175}],"2025-12-16":[{"indeks":"PEPCMPI540067","qty":48,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":48,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI540069","qty":48,"abc":"c","ct_s":161.129},{"indeks":"PEPCPAT96008","qty":18,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X016","qty":20,"abc":"d","ct_s":22.98},{"indeks":"PEPCLKN720007","qty":50,"abc":"d","ct_s":35.53},{"indeks":"PEPCLKO720020","qty":38,"abc":"d","ct_s":7.2},{"indeks":"PEPCLP1013","qty":48,"abc":"d","ct_s":3.075},{"indeks":"PEPCLKO720012","qty":49,"abc":"d","ct_s":23.691},{"indeks":"PEPCMIC30013","qty":39,"abc":"d","ct_s":90.0},{"indeks":"PEPCMMR670015","qty":1,"abc":"d","ct_s":80.6}],"2025-12-17":[{"indeks":"PEPCMPI530015","qty":12,"abc":"b","ct_s":13.953},{"indeks":"PEPCMIC10013","qty":1,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC500012","qty":4,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC250127","qty":37,"abc":"d","ct_s":25.318},{"indeks":"PEPCMIC15K020","qty":4,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC15K108","qty":4,"abc":"d","ct_s":159.03},{"indeks":"PEPCMIC250113","qty":37,"abc":"d","ct_s":54.542},{"indeks":"PEPCMIC15K024","qty":4,"abc":"d","ct_s":94.282},{"indeks":"PEPCMIC15K105","qty":4,"abc":"d","ct_s":0.0}],"2025-12-18":[{"indeks":"PEPCMPI530015","qty":45,"abc":"b","ct_s":13.953},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC250124","qty":28,"abc":"d","ct_s":48.567},{"indeks":"PEPCMMR6XX001","qty":17,"abc":"d","ct_s":72.0}],"2025-12-19":[{"indeks":"PEPCMPI540033","qty":45,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":250,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540067","qty":45,"abc":"c","ct_s":7.502},{"indeks":"PEPCBATMAN001","qty":80,"abc":"d","ct_s":0.0},{"indeks":"PEPCMZC320045","qty":41,"abc":"d","ct_s":38.0},{"indeks":"PEPCERP1006","qty":1,"abc":"d","ct_s":23.088},{"indeks":"PEPCMZC320027","qty":41,"abc":"d","ct_s":5.5},{"indeks":"PEPCLKO720011","qty":49,"abc":"d","ct_s":49.727}],"2025-12-22":[{"indeks":"PEPCMIC501052","qty":45,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC501072","qty":45,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC15K103","qty":4,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC501075","qty":45,"abc":"d","ct_s":26.253},{"indeks":"PEPCVIPER5022","qty":5,"abc":"d","ct_s":4.7},{"indeks":"PEPCTKF013003","qty":50,"abc":"d","ct_s":24.338},{"indeks":"PEPCPQM707015","qty":30,"abc":"d","ct_s":173.5}],"2025-12-23":[{"indeks":"PEPCMPI540029","qty":45,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI502F006","qty":25,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":25,"abc":"c","ct_s":45.0}],"2025-12-29":[{"indeks":"PEPCIMX62D003","qty":30,"abc":"d","ct_s":38.16},{"indeks":"PEPCMIC250124","qty":9,"abc":"d","ct_s":48.567},{"indeks":"PEPCMPI535027","qty":45,"abc":"d","ct_s":169.141},{"indeks":"PEPCMPI530034","qty":12,"abc":"d","ct_s":80.005},{"indeks":"PEPCMPI530047","qty":12,"abc":"d","ct_s":55.376}],"2025-12-30":[{"indeks":"PEPCERP1006","qty":13,"abc":"d","ct_s":23.088}],"2026-01-07":[{"indeks":"PEPCMPI540029","qty":72,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":72,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":38,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI530015","qty":72,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":72,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":45,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":47,"abc":"c","ct_s":93.157},{"indeks":"PEPCLKD2500007","qty":90,"abc":"c","ct_s":13.332},{"indeks":"PEPCMRU120014","qty":30,"abc":"c","ct_s":92.304},{"indeks":"PEPCMZC320043","qty":41,"abc":"d","ct_s":84.704},{"indeks":"PEPCLKD2500001","qty":90,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKD2500005","qty":30,"abc":"d","ct_s":3.185},{"indeks":"PEPCMZC320039","qty":41,"abc":"d","ct_s":1.125},{"indeks":"PEPCLKD2500009","qty":12,"abc":"d","ct_s":4.291},{"indeks":"PEPCEVSE01014","qty":40,"abc":"d","ct_s":34.05},{"indeks":"PEPCMRU030021","qty":23,"abc":"d","ct_s":16.65},{"indeks":"PEPCMRU030027","qty":23,"abc":"d","ct_s":66.0},{"indeks":"PEPCLKO2500033","qty":18,"abc":"f","ct_s":0.0}],"2026-01-08":[{"indeks":"PEPCMPI502F006","qty":24,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":54,"abc":"c","ct_s":45.0},{"indeks":"PEPCPAT86055","qty":17,"abc":"c","ct_s":30.0},{"indeks":"PEPCBATMAN001","qty":5,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKO2500031","qty":30,"abc":"d","ct_s":18.45},{"indeks":"PEPCMMR650053","qty":10,"abc":"d","ct_s":54.545},{"indeks":"PEPCLKN2500009","qty":30,"abc":"d","ct_s":5.289},{"indeks":"PEPCPAT9X025","qty":17,"abc":"d","ct_s":14.01},{"indeks":"PEPCLKN2010011","qty":30,"abc":"d","ct_s":3.0},{"indeks":"PEPCMMR650051","qty":10,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":10,"abc":"d","ct_s":59.0},{"indeks":"PEPCPAT9X020","qty":17,"abc":"d","ct_s":81.063},{"indeks":"PEPCMMR650061","qty":76,"abc":"d","ct_s":1.104},{"indeks":"PEPCAUTISO012","qty":16,"abc":"d","ct_s":16.987},{"indeks":"PEPCEVSE01008","qty":37,"abc":"d","ct_s":30.0},{"indeks":"PEPCSMARTTDR001","qty":62,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":62,"abc":"d","ct_s":14.1},{"indeks":"PEPCPAT96006","qty":17,"abc":"d","ct_s":44.28}],"2026-01-09":[{"indeks":"PEPCMPI502F006","qty":29,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":73,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI540PV005","qty":91,"abc":"d","ct_s":15.0},{"indeks":"PEPCPAT9X016","qty":17,"abc":"d","ct_s":22.98},{"indeks":"PEPCEVSE01008","qty":3,"abc":"d","ct_s":30.0}],"2026-01-12":[{"indeks":"PEPCWP0431001","qty":14,"abc":"b","ct_s":3.0},{"indeks":"PEPCPAT9X012","qty":17,"abc":"d","ct_s":39.0},{"indeks":"PEPCIRM-AMB003","qty":60,"abc":"d","ct_s":0.613},{"indeks":"PEPCMMR650061","qty":4,"abc":"d","ct_s":1.104},{"indeks":"PEPCMRU200029","qty":17,"abc":"d","ct_s":116.15},{"indeks":"PEPCLKD2500015","qty":30,"abc":"d","ct_s":0.0}],"2026-01-13":[{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":72,"abc":"c","ct_s":161.129},{"indeks":"PEPCLKN2500019","qty":30,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKN2500007","qty":30,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU030029","qty":23,"abc":"d","ct_s":47.371},{"indeks":"PEPCPQM750092","qty":1,"abc":"f","ct_s":0.0}],"2026-01-14":[{"indeks":"PEPCMPI540033","qty":35,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":35,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":22,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC500012","qty":20,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI520016","qty":20,"abc":"c","ct_s":156.518},{"indeks":"PEPCPAT2E1003","qty":39,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":39,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC15K103","qty":20,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC15K020","qty":20,"abc":"d","ct_s":73.332},{"indeks":"PEPCIRM-AMB003","qty":47,"abc":"d","ct_s":0.613},{"indeks":"PEPCVIPER5022","qty":11,"abc":"d","ct_s":4.7},{"indeks":"PEPCLP1013","qty":92,"abc":"d","ct_s":3.075},{"indeks":"PEPCMMR670015","qty":8,"abc":"d","ct_s":80.6}],"2026-01-15":[{"indeks":"PEPCIMX61D002","qty":30,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI50X003","qty":76,"abc":"c","ct_s":54.555},{"indeks":"PEPCPAT2E1010","qty":15,"abc":"c","ct_s":92.862},{"indeks":"PEPCBATMAN001","qty":140,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR650020","qty":11,"abc":"d","ct_s":29.175},{"indeks":"PEPCPAT96008","qty":17,"abc":"d","ct_s":16.009},{"indeks":"PEPCMMR670019","qty":10,"abc":"d","ct_s":45.0},{"indeks":"PEPCMMR6XX001","qty":11,"abc":"d","ct_s":72.0},{"indeks":"PEPCMRU21004","qty":26,"abc":"d","ct_s":75.0}],"2026-01-16":[{"indeks":"PEPCWP0431001","qty":243,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI50X001","qty":95,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI540065","qty":50,"abc":"c","ct_s":122.309},{"indeks":"PEPCPAT2E1010","qty":24,"abc":"c","ct_s":92.862},{"indeks":"PEPCPQM700012","qty":13,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKO720017","qty":48,"abc":"d","ct_s":29.03},{"indeks":"PEPCMMR650033","qty":30,"abc":"d","ct_s":3.0},{"indeks":"PEPCPQM700027","qty":13,"abc":"d","ct_s":15.99},{"indeks":"PEPCLKN720016","qty":60,"abc":"d","ct_s":27.953},{"indeks":"PEPCLKO720020","qty":48,"abc":"d","ct_s":7.2},{"indeks":"PEPCPAT010011","qty":39,"abc":"d","ct_s":26.3},{"indeks":"PEPCLKN720009","qty":60,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":60,"abc":"d","ct_s":5.803},{"indeks":"PEPCMMR670015","qty":2,"abc":"d","ct_s":80.6}],"2026-01-19":[{"indeks":"PEPCMMR650007","qty":20,"abc":"d","ct_s":128.585},{"indeks":"PEPCMMR650055","qty":5,"abc":"d","ct_s":59.0},{"indeks":"PEPCLKN720007","qty":58,"abc":"d","ct_s":35.53},{"indeks":"PEPCPQM700029","qty":13,"abc":"d","ct_s":77.22},{"indeks":"PEPCMIC15K024","qty":20,"abc":"d","ct_s":94.282},{"indeks":"PEPCMMR650030","qty":20,"abc":"d","ct_s":45.0},{"indeks":"PEPCLKN720019","qty":60,"abc":"d","ct_s":22.504}],"2026-01-20":[{"indeks":"PEPCMPI540029","qty":35,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI50X003","qty":18,"abc":"c","ct_s":54.555},{"indeks":"PEPCMIC15K108","qty":20,"abc":"d","ct_s":159.03},{"indeks":"PEPCLKO720011","qty":48,"abc":"d","ct_s":49.727},{"indeks":"PEPCMPI536018","qty":35,"abc":"d","ct_s":21.171},{"indeks":"PEPCMIC15K105","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKO720012","qty":48,"abc":"d","ct_s":23.691},{"indeks":"PEPCMPI536016","qty":35,"abc":"d","ct_s":124.006}],"2026-01-21":[{"indeks":"PEPCMPI540029","qty":56,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":56,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":56,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":56,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":66,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540065","qty":56,"abc":"c","ct_s":122.309},{"indeks":"PEPCIRM1006","qty":66,"abc":"d","ct_s":49.616},{"indeks":"PEPCIRM1007","qty":66,"abc":"d","ct_s":10.713},{"indeks":"PEPCIRM1002","qty":66,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU200GPS025","qty":2,"abc":"d","ct_s":120.0},{"indeks":"PEPCLKD2500009","qty":2,"abc":"d","ct_s":4.291}],"2026-01-22":[{"indeks":"PEPCMIC10013","qty":45,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC501052","qty":41,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC10K059","qty":34,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC250127","qty":56,"abc":"d","ct_s":25.318},{"indeks":"PEPCPAT2E1013","qty":6,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC250124","qty":56,"abc":"d","ct_s":48.567},{"indeks":"PEPCMZC320043","qty":14,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC10K050","qty":34,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC251132","qty":43,"abc":"d","ct_s":16.363},{"indeks":"PEPCMZC320045","qty":15,"abc":"d","ct_s":38.0},{"indeks":"PEPCMIC250113","qty":56,"abc":"d","ct_s":54.542},{"indeks":"PEPCMIC251125","qty":43,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":43,"abc":"d","ct_s":78.0},{"indeks":"PEPCMZC320027","qty":15,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":15,"abc":"d","ct_s":1.125},{"indeks":"PEPCMIC10K052","qty":34,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC251128","qty":43,"abc":"d","ct_s":92.064},{"indeks":"PEPCAUTISO020","qty":40,"abc":"d","ct_s":16.0},{"indeks":"PEPCMRU200GPS025","qty":16,"abc":"d","ct_s":120.0},{"indeks":"PEPCTKF012003","qty":60,"abc":"d","ct_s":2.1},{"indeks":"PEPCLORAS1008","qty":134,"abc":"d","ct_s":4.5}],"2026-01-23":[{"indeks":"PEPCWP0431001","qty":300,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI540065","qty":2,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC505014","qty":34,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC501072","qty":41,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC501075","qty":41,"abc":"d","ct_s":26.253},{"indeks":"PEPCAUTISO012","qty":14,"abc":"d","ct_s":16.987},{"indeks":"PEPCOR1000008","qty":14,"abc":"e","ct_s":4.3},{"indeks":"PEPCPAT2E1003","qty":1,"abc":"c","ct_s":9.0}],"2026-01-24":[{"indeks":"PEPCIRM-AMB003","qty":70,"abc":"d","ct_s":0.613}],"2026-01-26":[{"indeks":"PEPCMRU10003","qty":26,"abc":"c","ct_s":3.633},{"indeks":"PEPCPAT2E1010","qty":17,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":18,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":12,"abc":"d","ct_s":69.533},{"indeks":"PEPCAKU003","qty":210,"abc":"d","ct_s":3.334},{"indeks":"PEPCPAT12E001","qty":18,"abc":"d","ct_s":7.6}],"2026-01-27":[{"indeks":"PEPCPAT2E1010","qty":1,"abc":"c","ct_s":92.862},{"indeks":"PEPCTKF012001","qty":90,"abc":"d","ct_s":13.457}],"2026-01-28":[{"indeks":"PEPCMPI540029","qty":74,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":74,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":88,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":74,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":1,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540065","qty":74,"abc":"c","ct_s":122.309},{"indeks":"PEPCMRU10003","qty":34,"abc":"c","ct_s":3.633},{"indeks":"PEPCMRU120014","qty":22,"abc":"c","ct_s":92.304},{"indeks":"PEPCIMX62D003","qty":30,"abc":"d","ct_s":38.16},{"indeks":"PEPCMZC320043","qty":2,"abc":"d","ct_s":84.704},{"indeks":"PEPCLKN2500019","qty":30,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":30,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":30,"abc":"d","ct_s":5.289},{"indeks":"PEPCLKD2500005","qty":30,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":30,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKD2500009","qty":30,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKN2500007","qty":30,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU10006","qty":26,"abc":"d","ct_s":16.45},{"indeks":"PEPCMRU12004","qty":1,"abc":"d","ct_s":45.0},{"indeks":"PEPCTKF013003","qty":55,"abc":"d","ct_s":24.338},{"indeks":"PEPCMPI530034","qty":14,"abc":"d","ct_s":80.005},{"indeks":"PEPCMPI536014","qty":35,"abc":"d","ct_s":161.133},{"indeks":"PEPCMRU11002","qty":26,"abc":"d","ct_s":39.825},{"indeks":"PEPCMRU11010","qty":34,"abc":"d","ct_s":12.686},{"indeks":"PEPCPQM707015","qty":30,"abc":"d","ct_s":173.5},{"indeks":"PEPCMICSE005","qty":30,"abc":"e","ct_s":44.28},{"indeks":"PEPCOR1000008","qty":22,"abc":"e","ct_s":4.3}],"2026-01-29":[{"indeks":"PEPCMPI540029","qty":50,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":50,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":10,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":50,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":50,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":50,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC505014","qty":18,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K047","qty":34,"abc":"d","ct_s":74.025},{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCERP1006","qty":31,"abc":"d","ct_s":23.088},{"indeks":"PEPCLKN720007","qty":2,"abc":"d","ct_s":35.53},{"indeks":"PEPCMPI535027","qty":56,"abc":"d","ct_s":169.141},{"indeks":"PEPCEVSE01008","qty":40,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01016","qty":45,"abc":"d","ct_s":7.5},{"indeks":"PEPCMIC505023","qty":18,"abc":"d","ct_s":95.46},{"indeks":"PEPCMIC500062","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU12004","qty":33,"abc":"d","ct_s":45.0},{"indeks":"PEPCMMR640001","qty":10,"abc":"d","ct_s":41.4},{"indeks":"PEPCMIC10K060","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCTDR420008","qty":25,"abc":"f","ct_s":0.0}],"2026-01-30":[{"indeks":"PEPCMIC10013","qty":43,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI540069","qty":74,"abc":"c","ct_s":161.129},{"indeks":"PEPCMPI520016","qty":31,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC30013","qty":2,"abc":"d","ct_s":90.0},{"indeks":"PEPCPQM7XX067","qty":1,"abc":"d","ct_s":0.0}],"2026-02-02":[{"indeks":"PEPCLKD2500007","qty":90,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":50,"abc":"c","ct_s":161.129},{"indeks":"PEPCMRU120014","qty":19,"abc":"c","ct_s":92.304},{"indeks":"PEPCLKD2500001","qty":90,"abc":"d","ct_s":49.063},{"indeks":"PEPCMRU200029","qty":20,"abc":"d","ct_s":116.15},{"indeks":"PEPCLKD2500015","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI530047","qty":14,"abc":"d","ct_s":55.376},{"indeks":"PEPCIMX62D003","qty":1,"abc":"d","ct_s":38.16}],"2026-02-03":[{"indeks":"PEPCWP0431001","qty":12,"abc":"b","ct_s":3.0},{"indeks":"PEPCLKD2500007","qty":1,"abc":"c","ct_s":13.332},{"indeks":"PEPCERP1006","qty":6,"abc":"d","ct_s":23.088}],"2026-02-04":[{"indeks":"PEPCWP0431001","qty":11,"abc":"b","ct_s":3.0},{"indeks":"PEPCMIC500012","qty":30,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI540PV005","qty":91,"abc":"d","ct_s":15.0},{"indeks":"PEPCPAT9X025","qty":16,"abc":"d","ct_s":14.01},{"indeks":"PEPCMIC15K020","qty":30,"abc":"d","ct_s":73.332},{"indeks":"PEPCPAT9X016","qty":16,"abc":"d","ct_s":22.98},{"indeks":"PEPCEVSE01014","qty":35,"abc":"d","ct_s":34.05},{"indeks":"PEPCTDR420006","qty":31,"abc":"d","ct_s":40.92},{"indeks":"PEPCMZC310006","qty":11,"abc":"d","ct_s":0.0}],"2026-02-05":[{"indeks":"PEPCMPI540029","qty":30,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":31,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":31,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI502F006","qty":25,"abc":"c","ct_s":58.902},{"indeks":"PEPCPAT86055","qty":16,"abc":"c","ct_s":30.0},{"indeks":"PEPCPAT9X012","qty":16,"abc":"d","ct_s":39.0},{"indeks":"PEPCPAT9X020","qty":16,"abc":"d","ct_s":81.063},{"indeks":"PEPCMIC15K024","qty":30,"abc":"d","ct_s":94.282},{"indeks":"PEPCPAT95005","qty":16,"abc":"f","ct_s":31.7},{"indeks":"PEPCPAT95007","qty":16,"abc":"f","ct_s":16.0}],"2026-02-06":[{"indeks":"PEPCMPI540033","qty":61,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":61,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":61,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":84,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":106,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI502F006","qty":1,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI540065","qty":61,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":45,"abc":"c","ct_s":93.157},{"indeks":"PEPCPQM7XX052","qty":2,"abc":"d","ct_s":127.403},{"indeks":"PEPCMPI535027","qty":10,"abc":"d","ct_s":169.141},{"indeks":"PEPCPQM700029","qty":10,"abc":"d","ct_s":77.22},{"indeks":"PEPCIRM1007","qty":84,"abc":"d","ct_s":10.713},{"indeks":"PEPCPQM700012","qty":10,"abc":"d","ct_s":3.185},{"indeks":"PEPCIRM1002","qty":84,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM700027","qty":10,"abc":"d","ct_s":15.99},{"indeks":"PEPCMIC500062","qty":1,"abc":"d","ct_s":0.0}],"2026-02-07":[{"indeks":"PEPCMIC15K103","qty":30,"abc":"d","ct_s":57.186}],"2026-02-09":[{"indeks":"PEPCMPI540029","qty":62,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI50X003","qty":106,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI502F008","qty":25,"abc":"c","ct_s":45.0},{"indeks":"PEPCST0001004","qty":40,"abc":"d","ct_s":0.9},{"indeks":"PEPCPQM7XX067","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI536014","qty":31,"abc":"d","ct_s":161.133},{"indeks":"PEPCMPI540057","qty":3,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI536016","qty":31,"abc":"d","ct_s":124.006}],"2026-02-10":[{"indeks":"PEPCMPI50X001","qty":32,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":32,"abc":"c","ct_s":54.555},{"indeks":"PEPCMIC10013","qty":15,"abc":"c","ct_s":93.157},{"indeks":"PEPCMZC320043","qty":25,"abc":"d","ct_s":84.704},{"indeks":"PEPCMZC320045","qty":27,"abc":"d","ct_s":38.0},{"indeks":"PEPCMIC15K108","qty":30,"abc":"d","ct_s":159.03},{"indeks":"PEPCMZC320027","qty":27,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":27,"abc":"d","ct_s":1.125},{"indeks":"PEPCEVSE01014","qty":5,"abc":"d","ct_s":34.05},{"indeks":"PEPCMPI536018","qty":11,"abc":"d","ct_s":21.171},{"indeks":"PEPCSMARTTDR001","qty":55,"abc":"d","ct_s":30.906},{"indeks":"PEPCSMARTTDR003","qty":55,"abc":"d","ct_s":14.1},{"indeks":"PEPCMIC15K105","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI525008","qty":23,"abc":"d","ct_s":144.0},{"indeks":"PEPCRAMKAA004","qty":11,"abc":"f","ct_s":36.434},{"indeks":"PEPCRAMKAA006","qty":11,"abc":"f","ct_s":34.353},{"indeks":"PEPCRAMKAA008","qty":11,"abc":"f","ct_s":19.991}],"2026-02-11":[{"indeks":"PEPCMIC10013","qty":40,"abc":"c","ct_s":93.157},{"indeks":"PEPCPQM7XX052","qty":30,"abc":"d","ct_s":127.403},{"indeks":"PEPCPAT9X025","qty":26,"abc":"d","ct_s":14.01},{"indeks":"PEPCPQM7XX074","qty":30,"abc":"d","ct_s":4.89},{"indeks":"PEPCPQM7XX071","qty":30,"abc":"d","ct_s":15.0},{"indeks":"PEPCMMR650033","qty":55,"abc":"d","ct_s":3.0},{"indeks":"PEPCPQM7XX065","qty":30,"abc":"d","ct_s":0.0},{"indeks":"PEPCMLORA001","qty":10,"abc":"c","ct_s":4.666}],"2026-02-12":[{"indeks":"PEPCWP0431001","qty":47,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":2,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC10013","qty":10,"abc":"c","ct_s":93.157},{"indeks":"PEPCPAT86055","qty":26,"abc":"c","ct_s":30.0},{"indeks":"PEPCMPI540060","qty":3,"abc":"d","ct_s":0.0},{"indeks":"PEPCIRM-AMB003","qty":68,"abc":"d","ct_s":0.613},{"indeks":"PEPCMRU200029","qty":30,"abc":"d","ct_s":116.15},{"indeks":"PEPCMICRS3007","qty":6,"abc":"e","ct_s":20.55},{"indeks":"PEPCMMR650070","qty":2,"abc":"f","ct_s":0.0},{"indeks":"PEPCMMR650072","qty":2,"abc":"f","ct_s":0.0}],"2026-02-13":[{"indeks":"PEPCWP0431001","qty":258,"abc":"b","ct_s":3.0},{"indeks":"PEPCMIC501072","qty":6,"abc":"d","ct_s":62.567},{"indeks":"PEPCMIC250124","qty":97,"abc":"d","ct_s":48.567},{"indeks":"PEPCMZC320043","qty":2,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC250113","qty":97,"abc":"d","ct_s":54.542},{"indeks":"PEPCPAT9X016","qty":6,"abc":"d","ct_s":22.98},{"indeks":"PEPCMPI535027","qty":50,"abc":"d","ct_s":169.141},{"indeks":"PEPCLKO720011","qty":64,"abc":"d","ct_s":49.727},{"indeks":"PEPCLKO720017","qty":64,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKO720012","qty":64,"abc":"d","ct_s":23.691},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0},{"indeks":"PEPCMICRS2005","qty":6,"abc":"f","ct_s":39.99}],"2026-02-14":[{"indeks":"PEPCMIC250127","qty":46,"abc":"d","ct_s":25.318},{"indeks":"PEPCLKN720007","qty":58,"abc":"d","ct_s":35.53},{"indeks":"PEPCLKN720016","qty":64,"abc":"d","ct_s":27.953},{"indeks":"PEPCLKN720009","qty":64,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":64,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKN720019","qty":64,"abc":"d","ct_s":22.504},{"indeks":"PEPCPQM7XX052","qty":1,"abc":"d","ct_s":127.403}],"2026-02-16":[{"indeks":"PEPCMPI535027","qty":1,"abc":"d","ct_s":169.141}],"2026-02-17":[{"indeks":"PEPCST0001004","qty":3,"abc":"d","ct_s":0.9},{"indeks":"PEPCPAT9X012","qty":26,"abc":"d","ct_s":39.0},{"indeks":"PEPCMIC251132","qty":50,"abc":"d","ct_s":16.363},{"indeks":"PEPCMPI540PV005","qty":90,"abc":"d","ct_s":15.0},{"indeks":"PEPCMIC251125","qty":50,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":50,"abc":"d","ct_s":78.0},{"indeks":"PEPCPAT96008","qty":26,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":26,"abc":"d","ct_s":81.063},{"indeks":"PEPCVIPER5022","qty":7,"abc":"d","ct_s":4.7},{"indeks":"PEPCMMR6XX001","qty":7,"abc":"d","ct_s":72.0},{"indeks":"PEPCPAT96006","qty":26,"abc":"d","ct_s":44.28},{"indeks":"PEPCMICRS2005","qty":14,"abc":"f","ct_s":39.99}],"2026-02-18":[{"indeks":"PEPCMPI540029","qty":69,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":69,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":69,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":69,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":69,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI502F008","qty":30,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC501052","qty":19,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC505014","qty":21,"abc":"c","ct_s":8.14},{"indeks":"PEPCPAT2E1010","qty":13,"abc":"c","ct_s":92.862},{"indeks":"PEPCMPI520016","qty":20,"abc":"c","ct_s":156.518},{"indeks":"PEPCPAT2E1003","qty":13,"abc":"c","ct_s":9.0},{"indeks":"PEPCMMR650007","qty":24,"abc":"d","ct_s":128.585},{"indeks":"PEPCPAT2E1013","qty":13,"abc":"d","ct_s":69.533},{"indeks":"PEPCBATMAN001","qty":52,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC500051","qty":1,"abc":"d","ct_s":0.0},{"indeks":"PEPCAUTISO020","qty":49,"abc":"d","ct_s":16.0},{"indeks":"PEPCLKO720020","qty":64,"abc":"d","ct_s":7.2},{"indeks":"PEPCLP1013","qty":94,"abc":"d","ct_s":3.075},{"indeks":"PEPCTKF013003","qty":31,"abc":"d","ct_s":24.338},{"indeks":"PEPCPVM1021020","qty":32,"abc":"e","ct_s":24.326}],"2026-02-19":[{"indeks":"PEPCPVM1021015","qty":32,"abc":"d","ct_s":73.531}],"2026-02-20":[{"indeks":"PEPCWP0431001","qty":42,"abc":"b","ct_s":3.0},{"indeks":"PEPCMRU10003","qty":23,"abc":"c","ct_s":3.633},{"indeks":"PEPCTKF012001","qty":69,"abc":"d","ct_s":13.457},{"indeks":"PEPCMIC250127","qty":51,"abc":"d","ct_s":25.318},{"indeks":"PEPCIRM1006","qty":83,"abc":"d","ct_s":49.616}],"2026-02-21":[{"indeks":"PEPCWP0431001","qty":58,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":22,"abc":"b","ct_s":25.59},{"indeks":"PEPCPAT2E1010","qty":5,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":5,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":5,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC250124","qty":63,"abc":"d","ct_s":48.567}],"2026-02-23":[{"indeks":"PEPCIMX61D002","qty":2,"abc":"b","ct_s":25.59},{"indeks":"PEPCMLORA001","qty":35,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540069","qty":69,"abc":"c","ct_s":161.129},{"indeks":"PEPCMPI520016","qty":26,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC500051","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKN720007","qty":6,"abc":"d","ct_s":35.53},{"indeks":"PEPCMIC251128","qty":50,"abc":"d","ct_s":92.064},{"indeks":"PEPCMRU200029","qty":22,"abc":"d","ct_s":116.15},{"indeks":"PEPCMMR650030","qty":24,"abc":"d","ct_s":45.0},{"indeks":"PEPCPVM1021018","qty":32,"abc":"f","ct_s":60.0}],"2026-02-24":[{"indeks":"PEPCMPI502F006","qty":30,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC500012","qty":42,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC501052","qty":19,"abc":"c","ct_s":42.86},{"indeks":"PEPCBATMAN001","qty":8,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC500051","qty":42,"abc":"d","ct_s":0.0},{"indeks":"PEPCMRU12004","qty":1,"abc":"d","ct_s":45.0},{"indeks":"PEPCMIC500055","qty":42,"abc":"d","ct_s":95.452},{"indeks":"PEPCMRU11010","qty":24,"abc":"d","ct_s":12.686}],"2026-02-25":[{"indeks":"PEPCMPI540029","qty":59,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":59,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":71,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":59,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540069","qty":59,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC250127","qty":63,"abc":"d","ct_s":25.318},{"indeks":"PEPCPQM7XX052","qty":16,"abc":"d","ct_s":127.403},{"indeks":"PEPCMIC250113","qty":63,"abc":"d","ct_s":54.542},{"indeks":"PEPCPQM7XX074","qty":16,"abc":"d","ct_s":4.89},{"indeks":"PEPCMIC505023","qty":21,"abc":"d","ct_s":95.46},{"indeks":"PEPCPQM7XX067","qty":16,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX071","qty":16,"abc":"d","ct_s":15.0},{"indeks":"PEPCMRU12004","qty":23,"abc":"d","ct_s":45.0},{"indeks":"PEPCPAT010011","qty":18,"abc":"d","ct_s":26.3},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0},{"indeks":"PEPCTDR420006","qty":54,"abc":"d","ct_s":40.92}],"2026-02-26":[{"indeks":"PEPCMPI540029","qty":56,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":56,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":30,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":56,"abc":"c","ct_s":7.502},{"indeks":"PEPCMIC505014","qty":18,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K047","qty":18,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC10K059","qty":14,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC501072","qty":38,"abc":"d","ct_s":62.567},{"indeks":"PEPCLKN2500019","qty":3,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":39,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":39,"abc":"d","ct_s":5.289},{"indeks":"PEPCMIC10K050","qty":18,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC501075","qty":38,"abc":"d","ct_s":26.253},{"indeks":"PEPCLKD2500005","qty":39,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":39,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKD2500009","qty":39,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKN2500007","qty":39,"abc":"d","ct_s":30.0},{"indeks":"PEPCMRU200029","qty":1,"abc":"d","ct_s":116.15},{"indeks":"PEPCPQM700012","qty":15,"abc":"d","ct_s":3.185},{"indeks":"PEPCMMR6XX001","qty":2,"abc":"d","ct_s":72.0},{"indeks":"PEPCMPI530034","qty":12,"abc":"d","ct_s":80.005},{"indeks":"PEPCMIC500049","qty":42,"abc":"d","ct_s":57.193},{"indeks":"PEPCAUTISO032","qty":13,"abc":"e","ct_s":15.936}],"2026-02-27":[{"indeks":"PEPCMPI540065","qty":59,"abc":"c","ct_s":122.309},{"indeks":"PEPCPVM1020031","qty":5,"abc":"f","ct_s":0.0}],"2026-03-02":[{"indeks":"PEPCBATMAN001","qty":405,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM700027","qty":15,"abc":"d","ct_s":15.99},{"indeks":"PEPCMIC10K060","qty":21,"abc":"d","ct_s":0.0}],"2026-03-03":[{"indeks":"PEPCWP0431001","qty":8,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI50X001","qty":27,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":27,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540065","qty":56,"abc":"c","ct_s":122.309},{"indeks":"PEPCST0001004","qty":15,"abc":"d","ct_s":0.9},{"indeks":"PEPCAKU003","qty":117,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC10K052","qty":18,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM700029","qty":14,"abc":"d","ct_s":77.22},{"indeks":"PEPCMPI530047","qty":12,"abc":"d","ct_s":55.376},{"indeks":"PEPCMPI502F006","qty":1,"abc":"c","ct_s":58.902}],"2026-03-04":[{"indeks":"PEPCMPI540029","qty":63,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":63,"abc":"b","ct_s":3.814},{"indeks":"PEPCWP0431001","qty":10,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI530015","qty":63,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":63,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI50X001","qty":100,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":100,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540065","qty":53,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":61,"abc":"c","ct_s":93.157},{"indeks":"PEPCLKD2500007","qty":118,"abc":"c","ct_s":13.332},{"indeks":"PEPCST0001004","qty":10,"abc":"d","ct_s":0.9},{"indeks":"PEPCLKD2500001","qty":54,"abc":"d","ct_s":49.063},{"indeks":"PEPCIRM-AMB003","qty":66,"abc":"d","ct_s":0.613}],"2026-03-05":[{"indeks":"PEPCWP0431001","qty":242,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":20,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI530015","qty":26,"abc":"b","ct_s":13.953},{"indeks":"PEPCMRU10003","qty":1,"abc":"c","ct_s":3.633},{"indeks":"PEPCMPI520016","qty":48,"abc":"c","ct_s":156.518},{"indeks":"PEPCMRU120014","qty":32,"abc":"c","ct_s":92.304},{"indeks":"PEPCPAT86055","qty":5,"abc":"c","ct_s":30.0},{"indeks":"PEPCMIC10K059","qty":4,"abc":"d","ct_s":1.133},{"indeks":"PEPCMZC320043","qty":15,"abc":"d","ct_s":84.704},{"indeks":"PEPCLKN2500019","qty":36,"abc":"d","ct_s":111.817},{"indeks":"PEPCPAT9X012","qty":5,"abc":"d","ct_s":39.0},{"indeks":"PEPCMZC320045","qty":15,"abc":"d","ct_s":38.0},{"indeks":"PEPCPAT9X025","qty":5,"abc":"d","ct_s":14.01},{"indeks":"PEPCMZC320027","qty":15,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":15,"abc":"d","ct_s":1.125},{"indeks":"PEPCPAT9X016","qty":5,"abc":"d","ct_s":22.98},{"indeks":"PEPCPAT9X020","qty":5,"abc":"d","ct_s":81.063},{"indeks":"PEPCMPI535027","qty":56,"abc":"d","ct_s":169.141},{"indeks":"PEPCPQM700029","qty":1,"abc":"d","ct_s":77.22},{"indeks":"PEPCPAT96006","qty":5,"abc":"d","ct_s":44.28},{"indeks":"PEPCLKD2500015","qty":39,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC250120","qty":1,"abc":"f","ct_s":0.0}],"2026-03-06":[{"indeks":"PEPCIMX61D002","qty":9,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC501052","qty":54,"abc":"c","ct_s":42.86},{"indeks":"PEPCMPI540069","qty":41,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC501072","qty":54,"abc":"d","ct_s":62.567},{"indeks":"PEPCMMR650007","qty":10,"abc":"d","ct_s":128.585},{"indeks":"PEPCLKD2500001","qty":63,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC501075","qty":54,"abc":"d","ct_s":26.253},{"indeks":"PEPCMRU200029","qty":18,"abc":"d","ct_s":116.15},{"indeks":"PEPCVIPER5022","qty":11,"abc":"d","ct_s":4.7},{"indeks":"PEPCLKO720017","qty":69,"abc":"d","ct_s":29.03},{"indeks":"PEPCLKN720009","qty":69,"abc":"d","ct_s":5.717},{"indeks":"PEPCLKN720010","qty":69,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKO720012","qty":69,"abc":"d","ct_s":23.691},{"indeks":"PEPCMMR640001","qty":10,"abc":"d","ct_s":41.4},{"indeks":"PEPCLKN720019","qty":69,"abc":"d","ct_s":22.504}],"2026-03-09":[{"indeks":"PEPCMPI540065","qty":10,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI540069","qty":22,"abc":"c","ct_s":161.129},{"indeks":"PEPCMMR650007","qty":20,"abc":"d","ct_s":128.585},{"indeks":"PEPCMMR650030","qty":20,"abc":"d","ct_s":45.0}],"2026-03-10":[{"indeks":"PEPCMPI540029","qty":108,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":108,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":120,"abc":"b","ct_s":13.953},{"indeks":"PEPCMIC505014","qty":17,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC500051","qty":17,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC251132","qty":50,"abc":"d","ct_s":16.363},{"indeks":"PEPCIRM-AMB003","qty":91,"abc":"d","ct_s":0.613},{"indeks":"PEPCLKN720007","qty":69,"abc":"d","ct_s":35.53},{"indeks":"PEPCEVSE01008","qty":28,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":28,"abc":"d","ct_s":34.05},{"indeks":"PEPCMIC505023","qty":17,"abc":"d","ct_s":95.46},{"indeks":"PEPCSMARTTDR001","qty":92,"abc":"d","ct_s":30.906},{"indeks":"PEPCLKN720016","qty":69,"abc":"d","ct_s":27.953},{"indeks":"PEPCMMR6XX001","qty":11,"abc":"d","ct_s":72.0},{"indeks":"PEPCMRU200GPS025","qty":10,"abc":"d","ct_s":120.0},{"indeks":"PEPCMIC10K060","qty":17,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM7XX077","qty":120,"abc":"e","ct_s":8.501}],"2026-03-11":[{"indeks":"PEPCMPI540029","qty":36,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":36,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":36,"abc":"c","ct_s":7.502},{"indeks":"PEPCMIC500012","qty":29,"abc":"c","ct_s":7.5},{"indeks":"PEPCST0001004","qty":11,"abc":"d","ct_s":0.9},{"indeks":"PEPCMMR650020","qty":8,"abc":"d","ct_s":29.175},{"indeks":"PEPCMZC320043","qty":41,"abc":"d","ct_s":84.704},{"indeks":"PEPCMMR650053","qty":8,"abc":"d","ct_s":54.545},{"indeks":"PEPCMZC320045","qty":41,"abc":"d","ct_s":38.0},{"indeks":"PEPCMMR650051","qty":8,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":8,"abc":"d","ct_s":59.0},{"indeks":"PEPCMZC320027","qty":41,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":41,"abc":"d","ct_s":1.125},{"indeks":"PEPCMMR670019","qty":8,"abc":"d","ct_s":45.0},{"indeks":"PEPCMPI536018","qty":23,"abc":"d","ct_s":21.171},{"indeks":"PEPCSMARTTDR003","qty":92,"abc":"d","ct_s":14.1},{"indeks":"PEPCLKO720020","qty":69,"abc":"d","ct_s":7.2},{"indeks":"PEPCMPI536014","qty":36,"abc":"d","ct_s":161.133},{"indeks":"PEPCMIC500055","qty":29,"abc":"d","ct_s":95.452},{"indeks":"PEPCPAT96008","qty":6,"abc":"d","ct_s":16.009}],"2026-03-12":[{"indeks":"PEPCIMX61D002","qty":2,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI540067","qty":108,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":102,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI540069","qty":47,"abc":"c","ct_s":161.129},{"indeks":"PEPCLKO720011","qty":14,"abc":"d","ct_s":49.727},{"indeks":"PEPCGEOXTR003","qty":12,"abc":"f","ct_s":0.0}],"2026-03-13":[{"indeks":"PEPCWP0431001","qty":10,"abc":"b","ct_s":3.0},{"indeks":"PEPCMLORA001","qty":1,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540065","qty":6,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC505014","qty":33,"abc":"c","ct_s":8.14},{"indeks":"PEPCMPI540069","qty":61,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC10K059","qty":32,"abc":"d","ct_s":1.133},{"indeks":"PEPCIRM1006","qty":1,"abc":"d","ct_s":49.616},{"indeks":"PEPCMIC500051","qty":4,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC10K050","qty":4,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC251125","qty":50,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":50,"abc":"d","ct_s":78.0},{"indeks":"PEPCPAT96008","qty":5,"abc":"d","ct_s":16.009},{"indeks":"PEPCMIC10K052","qty":32,"abc":"d","ct_s":0.0},{"indeks":"PEPCEVSE01016","qty":40,"abc":"d","ct_s":7.5},{"indeks":"PEPCMIC15K024","qty":2,"abc":"d","ct_s":94.282},{"indeks":"PEPCLKO720011","qty":55,"abc":"d","ct_s":49.727},{"indeks":"PEPCMIC15K105","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCLORAS1008","qty":69,"abc":"d","ct_s":4.5},{"indeks":"PEPCMPI536016","qty":36,"abc":"d","ct_s":124.006},{"indeks":"PEPCMIC10K047","qty":1,"abc":"d","ct_s":74.025}],"2026-03-14":[{"indeks":"PEPCMPI530034","qty":12,"abc":"d","ct_s":80.005}],"2026-03-16":[{"indeks":"PEPCIMX61D002","qty":8,"abc":"b","ct_s":25.59},{"indeks":"PEPCMLORA001","qty":19,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC10K047","qty":32,"abc":"d","ct_s":74.025},{"indeks":"PEPCIRM1006","qty":107,"abc":"d","ct_s":49.616},{"indeks":"PEPCMPI540PV005","qty":87,"abc":"d","ct_s":15.0},{"indeks":"PEPCPAT9X025","qty":18,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":18,"abc":"d","ct_s":22.98},{"indeks":"PEPCMIC251128","qty":50,"abc":"d","ct_s":92.064},{"indeks":"PEPCTDR420008","qty":25,"abc":"f","ct_s":0.0},{"indeks":"PEPCMZC306008","qty":10,"abc":"f","ct_s":61.02},{"indeks":"PEPCMZC306009","qty":10,"abc":"f","ct_s":39.0}],"2026-03-17":[{"indeks":"PEPCMRU10003","qty":26,"abc":"c","ct_s":3.633},{"indeks":"PEPCPAT86055","qty":18,"abc":"c","ct_s":30.0},{"indeks":"PEPCTKF012001","qty":70,"abc":"d","ct_s":13.457},{"indeks":"PEPCPAT96008","qty":18,"abc":"d","ct_s":16.009},{"indeks":"PEPCPAT9X020","qty":18,"abc":"d","ct_s":81.063},{"indeks":"PEPCAUTISO012","qty":24,"abc":"d","ct_s":16.987},{"indeks":"PEPCIRM1007","qty":93,"abc":"d","ct_s":10.713},{"indeks":"PEPCMRU10006","qty":26,"abc":"d","ct_s":16.45},{"indeks":"PEPCPAT96006","qty":18,"abc":"d","ct_s":44.28},{"indeks":"PEPCMMR670015","qty":8,"abc":"d","ct_s":80.6},{"indeks":"PEPCMRU11002","qty":26,"abc":"d","ct_s":39.825},{"indeks":"PEPCMPI530047","qty":12,"abc":"d","ct_s":55.376}],"2026-03-18":[{"indeks":"PEPCMPI540029","qty":56,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":54,"abc":"b","ct_s":3.814},{"indeks":"PEPCMLORA001","qty":71,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI540065","qty":56,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":150,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC500012","qty":29,"abc":"c","ct_s":7.5},{"indeks":"PEPCMMR650020","qty":8,"abc":"d","ct_s":29.175},{"indeks":"PEPCMMR650053","qty":8,"abc":"d","ct_s":54.545},{"indeks":"PEPCMIC10K050","qty":28,"abc":"d","ct_s":97.93},{"indeks":"PEPCMIC15K020","qty":27,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC15K108","qty":29,"abc":"d","ct_s":159.03},{"indeks":"PEPCMMR650051","qty":8,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":8,"abc":"d","ct_s":59.0},{"indeks":"PEPCMMR650061","qty":24,"abc":"d","ct_s":1.104},{"indeks":"PEPCIRM1007","qty":16,"abc":"d","ct_s":10.713},{"indeks":"PEPCMIC15K024","qty":29,"abc":"d","ct_s":94.282},{"indeks":"PEPCLP1013","qty":81,"abc":"d","ct_s":3.075},{"indeks":"PEPCPAT010011","qty":21,"abc":"d","ct_s":26.3},{"indeks":"PEPCMMR650065","qty":8,"abc":"d","ct_s":51.729},{"indeks":"PEPCMICRS3007","qty":14,"abc":"e","ct_s":20.55},{"indeks":"PEPCIRM1019","qty":109,"abc":"f","ct_s":1.994},{"indeks":"PEPCMZC340015","qty":8,"abc":"f","ct_s":36.0},{"indeks":"PEPCMZC340001","qty":13,"abc":"f","ct_s":11.0},{"indeks":"PEPCMIC10K059","qty":5,"abc":"d","ct_s":1.133}],"2026-03-19":[{"indeks":"PEPCWP0431001","qty":300,"abc":"b","ct_s":3.0},{"indeks":"PEPCMPI502F008","qty":32,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC250127","qty":10,"abc":"d","ct_s":25.318},{"indeks":"PEPCMIC250124","qty":9,"abc":"d","ct_s":48.567},{"indeks":"PEPCLKD2500001","qty":114,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKN2500019","qty":38,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKO2500031","qty":38,"abc":"d","ct_s":18.45},{"indeks":"PEPCLKN2500009","qty":38,"abc":"d","ct_s":5.289},{"indeks":"PEPCMIC10K050","qty":2,"abc":"d","ct_s":97.93},{"indeks":"PEPCMZC320045","qty":31,"abc":"d","ct_s":38.0},{"indeks":"PEPCLKD2500005","qty":38,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":38,"abc":"d","ct_s":3.0},{"indeks":"PEPCMIC250113","qty":63,"abc":"d","ct_s":54.542},{"indeks":"PEPCMZC320027","qty":31,"abc":"d","ct_s":5.5},{"indeks":"PEPCLKD2500009","qty":38,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKN2500007","qty":38,"abc":"d","ct_s":30.0},{"indeks":"PEPCMPI536018","qty":13,"abc":"d","ct_s":21.171},{"indeks":"PEPCTDR420006","qty":51,"abc":"d","ct_s":40.92},{"indeks":"PEPCMIC500049","qty":29,"abc":"d","ct_s":57.193},{"indeks":"PEPCMZC340015","qty":5,"abc":"f","ct_s":36.0},{"indeks":"PEPCMZC340017","qty":5,"abc":"f","ct_s":16.05},{"indeks":"PEPCMZC340011","qty":13,"abc":"f","ct_s":2.7},{"indeks":"PEPCMZC340013","qty":13,"abc":"f","ct_s":56.7}],"2026-03-20":[{"indeks":"PEPCMPI540033","qty":2,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":56,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":56,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":52,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI502F006","qty":25,"abc":"c","ct_s":58.902},{"indeks":"PEPCMIC10013","qty":7,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI502F008","qty":25,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC501052","qty":3,"abc":"c","ct_s":42.86},{"indeks":"PEPCMRU10003","qty":23,"abc":"c","ct_s":3.633},{"indeks":"PEPCMIC250127","qty":53,"abc":"d","ct_s":25.318},{"indeks":"PEPCBATMAN001","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCMIC250124","qty":54,"abc":"d","ct_s":48.567},{"indeks":"PEPCAKU003","qty":170,"abc":"d","ct_s":3.334},{"indeks":"PEPCMPI535027","qty":56,"abc":"d","ct_s":169.141},{"indeks":"PEPCMRU12004","qty":23,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU11010","qty":23,"abc":"d","ct_s":12.686}],"2026-03-21":[{"indeks":"PEPCIMX61D002","qty":8,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI502F006","qty":32,"abc":"c","ct_s":58.902},{"indeks":"PEPCPAT2E1010","qty":21,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":21,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":21,"abc":"d","ct_s":69.533},{"indeks":"PEPCPAT9X012","qty":16,"abc":"d","ct_s":39.0},{"indeks":"PEPCMIC15K020","qty":2,"abc":"d","ct_s":73.332},{"indeks":"PEPCMMR650059","qty":2,"abc":"d","ct_s":49.8}],"2026-03-23":[{"indeks":"PEPCMMR650007","qty":3,"abc":"d","ct_s":128.585},{"indeks":"PEPCMMR650033","qty":20,"abc":"d","ct_s":3.0},{"indeks":"PEPCIMX62D003","qty":1,"abc":"d","ct_s":38.16},{"indeks":"PEPCMIC500029","qty":1,"abc":"f","ct_s":0.0}],"2026-03-24":[{"indeks":"PEPCMIC500051","qty":29,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKD2500015","qty":38,"abc":"d","ct_s":0.0},{"indeks":"PEPCEVSE10027","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCMZC340017","qty":8,"abc":"f","ct_s":16.05},{"indeks":"PEPCIRM1019","qty":1,"abc":"f","ct_s":1.994}],"2026-03-25":[{"indeks":"PEPCLKD2500007","qty":114,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC500012","qty":100,"abc":"c","ct_s":7.5},{"indeks":"PEPCMIC501072","qty":14,"abc":"d","ct_s":62.567},{"indeks":"PEPCMZC320043","qty":31,"abc":"d","ct_s":84.704},{"indeks":"PEPCPQM7XX052","qty":11,"abc":"d","ct_s":127.403},{"indeks":"PEPCMIC15K103","qty":29,"abc":"d","ct_s":57.186},{"indeks":"PEPCPQM7XX074","qty":11,"abc":"d","ct_s":4.89},{"indeks":"PEPCPQM700029","qty":1,"abc":"d","ct_s":77.22},{"indeks":"PEPCPQM700012","qty":4,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM7XX071","qty":11,"abc":"d","ct_s":15.0},{"indeks":"PEPCLKN720016","qty":69,"abc":"d","ct_s":27.953},{"indeks":"PEPCPQM7XX065","qty":11,"abc":"d","ct_s":0.0},{"indeks":"PEPCLKN720009","qty":69,"abc":"d","ct_s":5.717},{"indeks":"PEPCMIC501081","qty":100,"abc":"d","ct_s":102.0},{"indeks":"PEPCMPIMP1014","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCPAT9X025","qty":1,"abc":"d","ct_s":14.01}],"2026-03-26":[{"indeks":"PEPCMLORA001","qty":25,"abc":"c","ct_s":4.666},{"indeks":"PEPCPAT2E1010","qty":6,"abc":"c","ct_s":92.862},{"indeks":"PEPCMPI520016","qty":52,"abc":"c","ct_s":156.518},{"indeks":"PEPCPAT2E1003","qty":6,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":6,"abc":"d","ct_s":69.533},{"indeks":"PEPCIRM1006","qty":2,"abc":"d","ct_s":49.616},{"indeks":"PEPCAKU003","qty":55,"abc":"d","ct_s":3.334},{"indeks":"PEPCAUTISO020","qty":5,"abc":"d","ct_s":16.0},{"indeks":"PEPCMIC15K105","qty":15,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT010011","qty":6,"abc":"d","ct_s":26.3},{"indeks":"PEPCLKO720012","qty":69,"abc":"d","ct_s":23.691},{"indeks":"PEPCMMR650059","qty":6,"abc":"d","ct_s":49.8},{"indeks":"PEPCMRU030021","qty":17,"abc":"d","ct_s":16.65},{"indeks":"PEPCMRU030027","qty":8,"abc":"d","ct_s":66.0},{"indeks":"PEPCMRU030029","qty":9,"abc":"d","ct_s":47.371}],"2026-03-27":[{"indeks":"PEPCMLORA001","qty":4,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC251132","qty":10,"abc":"d","ct_s":16.363},{"indeks":"PEPCERP1006","qty":23,"abc":"d","ct_s":23.088},{"indeks":"PEPCMIC251125","qty":10,"abc":"d","ct_s":17.148},{"indeks":"PEPCMIC251134","qty":8,"abc":"d","ct_s":78.0},{"indeks":"PEPCMIC251128","qty":8,"abc":"d","ct_s":92.064}],"2026-03-28":[{"indeks":"PEPCMIC15K103","qty":100,"abc":"d","ct_s":57.186},{"indeks":"PEPCMIC500051","qty":80,"abc":"d","ct_s":0.0},{"indeks":"PEPCMZC320039","qty":31,"abc":"d","ct_s":1.125},{"indeks":"PEPCMRP201007","qty":19,"abc":"d","ct_s":85.013},{"indeks":"PEPCPVM1021015","qty":52,"abc":"d","ct_s":73.531},{"indeks":"PEPCPVM1021020","qty":52,"abc":"e","ct_s":24.326}],"2026-03-30":[{"indeks":"PEPCMIC501052","qty":51,"abc":"c","ct_s":42.86},{"indeks":"PEPCMIC501072","qty":53,"abc":"d","ct_s":62.567},{"indeks":"PEPCTKF012001","qty":25,"abc":"d","ct_s":13.457},{"indeks":"PEPCPAT9X012","qty":2,"abc":"d","ct_s":39.0},{"indeks":"PEPCMIC501075","qty":54,"abc":"d","ct_s":26.253},{"indeks":"PEPCLKN720007","qty":60,"abc":"d","ct_s":35.53},{"indeks":"PEPCMRU200029","qty":20,"abc":"d","ct_s":116.15},{"indeks":"PEPCMRU200GPS025","qty":10,"abc":"d","ct_s":120.0},{"indeks":"PEPCTKF012003","qty":2,"abc":"d","ct_s":2.1},{"indeks":"PEPCMPIMP1021","qty":2,"abc":"f","ct_s":0.0},{"indeks":"PEPCEVSE10020","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCEVSE10031","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCGEOPRO003","qty":14,"abc":"f","ct_s":0.0}],"2026-03-31":[{"indeks":"PEPCWP0431001","qty":20,"abc":"b","ct_s":3.0},{"indeks":"PEPCMZC320045","qty":15,"abc":"d","ct_s":38.0},{"indeks":"PEPCMZC320027","qty":15,"abc":"d","ct_s":5.5},{"indeks":"PEPCLKO720011","qty":69,"abc":"d","ct_s":49.727},{"indeks":"PEPCLKO720017","qty":69,"abc":"d","ct_s":29.03},{"indeks":"PEPCSMARTTDR003","qty":105,"abc":"d","ct_s":14.1},{"indeks":"PEPCLKN720010","qty":69,"abc":"d","ct_s":5.803},{"indeks":"PEPCLKN720019","qty":69,"abc":"d","ct_s":22.504}],"2026-04-01":[{"indeks":"PEPCMPI530015","qty":6,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X001","qty":2,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":3,"abc":"c","ct_s":54.555},{"indeks":"PEPCPAT2E1013","qty":15,"abc":"d","ct_s":69.533},{"indeks":"PEPCEVSE01008","qty":37,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":37,"abc":"d","ct_s":34.05},{"indeks":"PEPCPQM700027","qty":15,"abc":"d","ct_s":15.99},{"indeks":"PEPCTKF013003","qty":55,"abc":"d","ct_s":24.338},{"indeks":"PEPCMPI530034","qty":6,"abc":"d","ct_s":80.005},{"indeks":"PEPCMPI530047","qty":6,"abc":"d","ct_s":55.376}],"2026-04-02":[{"indeks":"PEPCWP0431001","qty":20,"abc":"b","ct_s":3.0},{"indeks":"PEPCPAT2E1003","qty":15,"abc":"c","ct_s":9.0},{"indeks":"PEPCMZC320043","qty":15,"abc":"d","ct_s":84.704},{"indeks":"PEPCMIC500051","qty":20,"abc":"d","ct_s":0.0},{"indeks":"PEPCAKU003","qty":40,"abc":"d","ct_s":3.334},{"indeks":"PEPCMIC251132","qty":40,"abc":"d","ct_s":16.363},{"indeks":"PEPCMZC320039","qty":15,"abc":"d","ct_s":1.125},{"indeks":"PEPCPQM700029","qty":14,"abc":"d","ct_s":77.22},{"indeks":"PEPCPQM700012","qty":11,"abc":"d","ct_s":3.185},{"indeks":"PEPCMIC15K105","qty":14,"abc":"d","ct_s":0.0},{"indeks":"PEPCPAT010011","qty":15,"abc":"d","ct_s":26.3},{"indeks":"PEPCMRU030021","qty":20,"abc":"d","ct_s":16.65},{"indeks":"PEPCMRU030029","qty":33,"abc":"d","ct_s":47.371},{"indeks":"PEPCMZC20E004","qty":50,"abc":"e","ct_s":31.6},{"indeks":"PEPCTDR420008","qty":25,"abc":"f","ct_s":0.0},{"indeks":"PEPCEVSE10024","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCVIRTUPAT9804","qty":42,"abc":"f","ct_s":0.0}],"2026-04-03":[{"indeks":"PEPCMIC251134","qty":42,"abc":"d","ct_s":78.0},{"indeks":"PEPCMRU21004","qty":10,"abc":"d","ct_s":75.0},{"indeks":"PEPCMRU030021","qty":5,"abc":"d","ct_s":16.65},{"indeks":"PEPCMRU030027","qty":34,"abc":"d","ct_s":66.0},{"indeks":"PEPCPQM750070","qty":7,"abc":"e","ct_s":20.7},{"indeks":"PEPCPVM1021018","qty":52,"abc":"f","ct_s":60.0}],"2026-04-07":[{"indeks":"PEPCMPI50X001","qty":52,"abc":"c","ct_s":71.252},{"indeks":"PEPCPAT2E1010","qty":9,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":8,"abc":"c","ct_s":9.0},{"indeks":"PEPCPAT2E1013","qty":8,"abc":"d","ct_s":69.533},{"indeks":"PEPCMIC251125","qty":40,"abc":"d","ct_s":17.148},{"indeks":"PEPCLKN720007","qty":9,"abc":"d","ct_s":35.53},{"indeks":"PEPCMIC251128","qty":42,"abc":"d","ct_s":92.064},{"indeks":"PEPCLKO720020","qty":20,"abc":"d","ct_s":7.2},{"indeks":"PEPCPAT12E001","qty":8,"abc":"d","ct_s":7.6},{"indeks":"PEPCPQM750075","qty":6,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750078","qty":6,"abc":"d","ct_s":5.0},{"indeks":"PEPCPQM750068","qty":2,"abc":"e","ct_s":111.0},{"indeks":"PEPCVIRTUPAT9806","qty":18,"abc":"f","ct_s":0.0}],"2026-04-08":[{"indeks":"PEPCMPI50X001","qty":58,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":52,"abc":"c","ct_s":54.555},{"indeks":"PEPCPAT2E1010","qty":15,"abc":"c","ct_s":92.862},{"indeks":"PEPCMPI540PV005","qty":13,"abc":"d","ct_s":15.0},{"indeks":"PEPCSMARTTDR001","qty":108,"abc":"d","ct_s":30.906},{"indeks":"PEPCMRU21004","qty":1,"abc":"d","ct_s":75.0},{"indeks":"PEPCMPI540067","qty":1,"abc":"c","ct_s":7.502}],"2026-04-09":[{"indeks":"PEPCMPI540029","qty":22,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":22,"abc":"b","ct_s":3.814},{"indeks":"PEPCIMX61D002","qty":13,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI540067","qty":22,"abc":"c","ct_s":7.502},{"indeks":"PEPCMIC505014","qty":36,"abc":"c","ct_s":8.14},{"indeks":"PEPCPAT86055","qty":9,"abc":"c","ct_s":30.0},{"indeks":"PEPCMIC10K059","qty":36,"abc":"d","ct_s":1.133},{"indeks":"PEPCMMR650007","qty":13,"abc":"d","ct_s":128.585},{"indeks":"PEPCST0001004","qty":29,"abc":"d","ct_s":0.9},{"indeks":"PEPCPAT9X012","qty":9,"abc":"d","ct_s":39.0},{"indeks":"PEPCPAT9X025","qty":10,"abc":"d","ct_s":14.01},{"indeks":"PEPCPAT9X016","qty":10,"abc":"d","ct_s":22.98},{"indeks":"PEPCPAT9X020","qty":9,"abc":"d","ct_s":81.063},{"indeks":"PEPCMIC10K052","qty":36,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR6XX001","qty":8,"abc":"d","ct_s":72.0},{"indeks":"PEPCTDR420006","qty":26,"abc":"d","ct_s":40.92},{"indeks":"PEPCDBT004","qty":5,"abc":"f","ct_s":30.0}],"2026-04-10":[{"indeks":"PEPCMPI540029","qty":55,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":55,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":69,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X003","qty":57,"abc":"c","ct_s":54.555},{"indeks":"PEPCMIC10K047","qty":35,"abc":"d","ct_s":74.025},{"indeks":"PEPCTKF012001","qty":17,"abc":"d","ct_s":13.457},{"indeks":"PEPCLKD2500001","qty":54,"abc":"d","ct_s":49.063},{"indeks":"PEPCMIC10K050","qty":36,"abc":"d","ct_s":97.93},{"indeks":"PEPCMPI535027","qty":1,"abc":"d","ct_s":169.141},{"indeks":"PEPCTKF012003","qty":124,"abc":"d","ct_s":2.1},{"indeks":"PEPCMPI525008","qty":14,"abc":"d","ct_s":144.0},{"indeks":"PEPCMZC310006","qty":2,"abc":"d","ct_s":0.0},{"indeks":"PEPCPQM750078","qty":1,"abc":"d","ct_s":5.0},{"indeks":"PEPCPQM750082","qty":7,"abc":"e","ct_s":10.5}],"2026-04-11":[{"indeks":"PEPCTKF012001","qty":46,"abc":"d","ct_s":13.457}],"2026-04-13":[{"indeks":"PEPCWP0431001","qty":300,"abc":"b","ct_s":3.0},{"indeks":"PEPCMRU120014","qty":5,"abc":"c","ct_s":92.304},{"indeks":"PEPCMPI540PV005","qty":98,"abc":"d","ct_s":15.0},{"indeks":"PEPCMPI536018","qty":22,"abc":"d","ct_s":21.171},{"indeks":"PEPCMPI536014","qty":22,"abc":"d","ct_s":161.133}],"2026-04-14":[{"indeks":"PEPCMPI540029","qty":63,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":17,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":26,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI540067","qty":63,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":63,"abc":"c","ct_s":122.309},{"indeks":"PEPCMPI540069","qty":2,"abc":"c","ct_s":161.129},{"indeks":"PEPCLKN2500019","qty":38,"abc":"d","ct_s":111.817},{"indeks":"PEPCLKD2500005","qty":31,"abc":"d","ct_s":3.185},{"indeks":"PEPCLKN2010011","qty":38,"abc":"d","ct_s":3.0},{"indeks":"PEPCLKD2500009","qty":38,"abc":"d","ct_s":4.291},{"indeks":"PEPCLKN2500007","qty":38,"abc":"d","ct_s":30.0},{"indeks":"PEPCLKD2500015","qty":38,"abc":"d","ct_s":0.0},{"indeks":"PEPCMPI525008","qty":1,"abc":"d","ct_s":144.0},{"indeks":"PEPCMPI536016","qty":22,"abc":"d","ct_s":124.006},{"indeks":"PEPCMICRS009","qty":4,"abc":"f","ct_s":15.0},{"indeks":"PEPCMICRS012","qty":4,"abc":"f","ct_s":66.7}],"2026-04-15":[{"indeks":"PEPCMIC250127","qty":41,"abc":"d","ct_s":25.318},{"indeks":"PEPCIMX62D003","qty":9,"abc":"d","ct_s":38.16},{"indeks":"PEPCMIC250124","qty":41,"abc":"d","ct_s":48.567},{"indeks":"PEPCAKU003","qty":4,"abc":"d","ct_s":3.334},{"indeks":"PEPCLKN2500009","qty":38,"abc":"d","ct_s":5.289},{"indeks":"PEPCMPI535027","qty":54,"abc":"d","ct_s":169.141}],"2026-04-16":[{"indeks":"PEPCMPI540029","qty":6,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":2,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":33,"abc":"c","ct_s":7.502},{"indeks":"PEPCMPI540065","qty":55,"abc":"c","ct_s":122.309},{"indeks":"PEPCMIC10013","qty":50,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI520016","qty":3,"abc":"c","ct_s":156.518},{"indeks":"PEPCMRU120014","qty":15,"abc":"c","ct_s":92.304},{"indeks":"PEPCMIC501072","qty":1,"abc":"d","ct_s":62.567},{"indeks":"PEPCLKD2500001","qty":60,"abc":"d","ct_s":49.063},{"indeks":"PEPCLKO2500031","qty":38,"abc":"d","ct_s":18.45},{"indeks":"PEPCMIC15K020","qty":1,"abc":"d","ct_s":73.332},{"indeks":"PEPCMIC15K108","qty":2,"abc":"d","ct_s":159.03},{"indeks":"PEPCLKO720020","qty":49,"abc":"d","ct_s":7.2},{"indeks":"PEPCMPI530034","qty":14,"abc":"d","ct_s":80.005},{"indeks":"PEPCPQM750075","qty":1,"abc":"d","ct_s":38.7},{"indeks":"PEPCPQM750068","qty":5,"abc":"e","ct_s":111.0},{"indeks":"PEPCPAT95005","qty":9,"abc":"f","ct_s":31.7},{"indeks":"PEPCPAT95007","qty":9,"abc":"f","ct_s":16.0}],"2026-04-17":[{"indeks":"PEPCMPI540029","qty":86,"abc":"b","ct_s":7.501},{"indeks":"PEPCMPI540033","qty":136,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI530015","qty":129,"abc":"b","ct_s":13.953},{"indeks":"PEPCMPI50X001","qty":24,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":24,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI540065","qty":92,"abc":"c","ct_s":122.309},{"indeks":"PEPCLKD2500007","qty":44,"abc":"c","ct_s":13.332},{"indeks":"PEPCMIC500012","qty":12,"abc":"c","ct_s":7.5},{"indeks":"PEPCMPI502F008","qty":1,"abc":"c","ct_s":45.0},{"indeks":"PEPCMIC505014","qty":18,"abc":"c","ct_s":8.14},{"indeks":"PEPCMIC10K059","qty":18,"abc":"d","ct_s":1.133},{"indeks":"PEPCMIC15K103","qty":12,"abc":"d","ct_s":57.186},{"indeks":"PEPCPQM700029","qty":2,"abc":"d","ct_s":77.22},{"indeks":"PEPCVIPER5022","qty":30,"abc":"d","ct_s":4.7},{"indeks":"PEPCEVSE01016","qty":3,"abc":"d","ct_s":7.5},{"indeks":"PEPCPQM700012","qty":9,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM700027","qty":1,"abc":"d","ct_s":15.99},{"indeks":"PEPCSMARTTDR003","qty":3,"abc":"d","ct_s":14.1},{"indeks":"PEPCMIC500062","qty":15,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR640001","qty":13,"abc":"d","ct_s":41.4},{"indeks":"PEPCPQM707015","qty":28,"abc":"d","ct_s":173.5}],"2026-04-18":[{"indeks":"PEPCIMX61D002","qty":1,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC10K047","qty":1,"abc":"d","ct_s":74.025},{"indeks":"PEPCMZC320043","qty":25,"abc":"d","ct_s":84.704},{"indeks":"PEPCMZC320045","qty":25,"abc":"d","ct_s":38.0},{"indeks":"PEPCMZC320027","qty":25,"abc":"d","ct_s":5.5},{"indeks":"PEPCMZC320039","qty":25,"abc":"d","ct_s":1.125},{"indeks":"PEPCAUTISO012","qty":3,"abc":"d","ct_s":16.987},{"indeks":"PEPCAUTISO020","qty":40,"abc":"d","ct_s":16.0}],"2026-04-20":[{"indeks":"PEPCMPI540067","qty":114,"abc":"c","ct_s":7.502},{"indeks":"PEPCMIC10013","qty":83,"abc":"c","ct_s":93.157},{"indeks":"PEPCMPI540069","qty":61,"abc":"c","ct_s":161.129},{"indeks":"PEPCMIC250113","qty":41,"abc":"d","ct_s":54.542},{"indeks":"PEPCMIC15K024","qty":12,"abc":"d","ct_s":94.282},{"indeks":"PEPCMPI530047","qty":14,"abc":"d","ct_s":55.376},{"indeks":"PEPCMPIMP1024","qty":10,"abc":"f","ct_s":0.0},{"indeks":"PEPCVIRTUPAT003","qty":2,"abc":"f","ct_s":0.0}],"2026-04-21":[{"indeks":"PEPCLKD2500007","qty":70,"abc":"c","ct_s":13.332},{"indeks":"PEPCMPI540069","qty":92,"abc":"c","ct_s":161.129},{"indeks":"PEPCMPI520016","qty":49,"abc":"c","ct_s":156.518},{"indeks":"PEPCMIC10K047","qty":17,"abc":"d","ct_s":74.025},{"indeks":"PEPCMIC505023","qty":18,"abc":"d","ct_s":95.46}],"2026-04-22":[{"indeks":"PEPCIMX61D002","qty":15,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI50X001","qty":50,"abc":"c","ct_s":71.252},{"indeks":"PEPCMPI50X003","qty":49,"abc":"c","ct_s":54.555},{"indeks":"PEPCMPI502F006","qty":42,"abc":"c","ct_s":58.902},{"indeks":"PEPCMPI502F008","qty":54,"abc":"c","ct_s":45.0},{"indeks":"PEPCPAT2E1010","qty":4,"abc":"c","ct_s":92.862},{"indeks":"PEPCPAT2E1003","qty":2,"abc":"c","ct_s":9.0},{"indeks":"PEPCMMR650007","qty":4,"abc":"d","ct_s":128.585},{"indeks":"PEPCPAT2E1013","qty":6,"abc":"d","ct_s":69.533},{"indeks":"PEPCLKD2500005","qty":7,"abc":"d","ct_s":3.185},{"indeks":"PEPCMIC15K020","qty":11,"abc":"d","ct_s":73.332},{"indeks":"PEPCMMR650030","qty":1,"abc":"d","ct_s":45.0},{"indeks":"PEPCPAT12E001","qty":3,"abc":"d","ct_s":7.6},{"indeks":"PEPCMRU120015","qty":10,"abc":"f","ct_s":0.0}],"2026-04-23":[{"indeks":"PEPCIMX61D002","qty":3,"abc":"b","ct_s":25.59},{"indeks":"PEPCMPI502F006","qty":13,"abc":"c","ct_s":58.902},{"indeks":"PEPCPAT2E1003","qty":28,"abc":"c","ct_s":9.0},{"indeks":"PEPCST0001004","qty":70,"abc":"d","ct_s":0.9},{"indeks":"PEPCMMR650020","qty":35,"abc":"d","ct_s":29.175},{"indeks":"PEPCMMR650053","qty":35,"abc":"d","ct_s":54.545},{"indeks":"PEPCAKU003","qty":91,"abc":"d","ct_s":3.334},{"indeks":"PEPCMMR650051","qty":34,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650055","qty":35,"abc":"d","ct_s":59.0},{"indeks":"PEPCPQM700029","qty":10,"abc":"d","ct_s":77.22},{"indeks":"PEPCAUTISO012","qty":13,"abc":"d","ct_s":16.987},{"indeks":"PEPCPQM700012","qty":4,"abc":"d","ct_s":3.185},{"indeks":"PEPCPQM700027","qty":12,"abc":"d","ct_s":15.99},{"indeks":"PEPCMIC500062","qty":3,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR650065","qty":7,"abc":"d","ct_s":51.729},{"indeks":"PEPCPAT12E001","qty":27,"abc":"d","ct_s":7.6},{"indeks":"PEPCMPIMP1021","qty":8,"abc":"f","ct_s":0.0},{"indeks":"PEPCLKO2500031","qty":1,"abc":"d","ct_s":18.45},{"indeks":"PEPCPAT86055","qty":1,"abc":"c","ct_s":30.0}],"2026-04-24":[{"indeks":"PEPCMLORA001","qty":48,"abc":"c","ct_s":4.666},{"indeks":"PEPCMPI50X001","qty":56,"abc":"c","ct_s":71.252},{"indeks":"PEPCMRU10003","qty":23,"abc":"c","ct_s":3.633},{"indeks":"PEPCMRU120014","qty":13,"abc":"c","ct_s":92.304},{"indeks":"PEPCIRM1006","qty":10,"abc":"d","ct_s":49.616},{"indeks":"PEPCMMR650020","qty":9,"abc":"d","ct_s":29.175},{"indeks":"PEPCPQM7XX052","qty":19,"abc":"d","ct_s":127.403},{"indeks":"PEPCMMR650053","qty":7,"abc":"d","ct_s":54.545},{"indeks":"PEPCMIC15K108","qty":10,"abc":"d","ct_s":159.03},{"indeks":"PEPCMMR650055","qty":9,"abc":"d","ct_s":59.0},{"indeks":"PEPCPQM7XX074","qty":9,"abc":"d","ct_s":4.89},{"indeks":"PEPCEVSE01008","qty":40,"abc":"d","ct_s":30.0},{"indeks":"PEPCEVSE01014","qty":4,"abc":"d","ct_s":34.05},{"indeks":"PEPCIRM1007","qty":11,"abc":"d","ct_s":10.713},{"indeks":"PEPCPQM7XX071","qty":22,"abc":"d","ct_s":15.0},{"indeks":"PEPCMMR650033","qty":20,"abc":"d","ct_s":3.0},{"indeks":"PEPCMMR670019","qty":9,"abc":"d","ct_s":45.0},{"indeks":"PEPCMRU10006","qty":1,"abc":"d","ct_s":16.45},{"indeks":"PEPCTKF013003","qty":41,"abc":"d","ct_s":24.338},{"indeks":"PEPCLORAS1008","qty":88,"abc":"d","ct_s":4.5},{"indeks":"PEPCMICSE005","qty":30,"abc":"e","ct_s":44.28},{"indeks":"PEPCAUTISO032","qty":13,"abc":"e","ct_s":15.936},{"indeks":"PEPCIRM1019","qty":63,"abc":"f","ct_s":1.994},{"indeks":"PEPCMIC15K119","qty":12,"abc":"f","ct_s":36.6}],"2026-04-27":[{"indeks":"PEPCWP0431001","qty":220,"abc":"b","ct_s":3.0},{"indeks":"PEPCIMX61D002","qty":27,"abc":"b","ct_s":25.59},{"indeks":"PEPCMIC10013","qty":33,"abc":"c","ct_s":93.157},{"indeks":"PEPCPAT2E1013","qty":24,"abc":"d","ct_s":69.533},{"indeks":"PEPCIMX62D003","qty":17,"abc":"d","ct_s":38.16},{"indeks":"PEPCMMR650053","qty":2,"abc":"d","ct_s":54.545},{"indeks":"PEPCMMR650051","qty":9,"abc":"d","ct_s":18.355},{"indeks":"PEPCMMR650030","qty":19,"abc":"d","ct_s":45.0},{"indeks":"PEPCMMR650033","qty":15,"abc":"d","ct_s":3.0},{"indeks":"PEPCMRU10006","qty":22,"abc":"d","ct_s":16.45},{"indeks":"PEPCMMR640001","qty":15,"abc":"d","ct_s":41.4},{"indeks":"PEPCMRU11002","qty":23,"abc":"d","ct_s":39.825},{"indeks":"PEPCMMR650065","qty":28,"abc":"d","ct_s":51.729},{"indeks":"PEPCMIC10K059","qty":1,"abc":"d","ct_s":1.133}],"2026-04-28":[{"indeks":"PEPCMPI540029","qty":36,"abc":"b","ct_s":7.501},{"indeks":"PEPCIMX61D002","qty":33,"abc":"b","ct_s":25.59},{"indeks":"PEPCPAT2E1010","qty":25,"abc":"c","ct_s":92.862},{"indeks":"PEPCMIC10K059","qty":12,"abc":"d","ct_s":1.133},{"indeks":"PEPCIMX62D003","qty":2,"abc":"d","ct_s":38.16},{"indeks":"PEPCMIC500051","qty":28,"abc":"d","ct_s":0.0},{"indeks":"PEPCMMR650051","qty":1,"abc":"d","ct_s":18.355},{"indeks":"PEPCEVSE01014","qty":36,"abc":"d","ct_s":34.05}],"2026-04-29":[{"indeks":"PEPCMPI50X003","qty":57,"abc":"c","ct_s":54.555},{"indeks":"PEPCEVSE01016","qty":43,"abc":"d","ct_s":7.5},{"indeks":"PEPCPQM7XX071","qty":25,"abc":"d","ct_s":15.0},{"indeks":"PEPCMPIMP1030","qty":10,"abc":"f","ct_s":0.0}],"2026-04-30":[{"indeks":"PEPCMPI540033","qty":36,"abc":"b","ct_s":3.814},{"indeks":"PEPCMPI540067","qty":36,"abc":"c","ct_s":7.502},{"indeks":"PEPCMLORA001","qty":44,"abc":"c","ct_s":4.666},{"indeks":"PEPCMIC10013","qty":4,"abc":"c","ct_s":93.157},{"indeks":"PEPCMIC500012","qty":28,"abc":"c","ct_s":7.5},{"indeks":"PEPCIRM1006","qty":53,"abc":"d","ct_s":49.616},{"indeks":"PEPCLKN2500009","qty":38,"abc":"d","ct_s":5.289},{"indeks":"PEPCERP1006","qty":25,"abc":"d","ct_s":23.088},{"indeks":"PEPCIRM1007","qty":49,"abc":"d","ct_s":10.713},{"indeks":"PEPCMRU21004","qty":16,"abc":"d","ct_s":75.0},{"indeks":"PEPCMIC500055","qty":28,"abc":"d","ct_s":95.452},{"indeks":"PEPCPVM1021020","qty":29,"abc":"e","ct_s":24.326}]}';
+
+const COLORS = { a:'#3266ad', b:'#1d9e75', c:'#d85a30', def:'#888780' };
+const GROUP_LABELS = { a:'a', b:'b', c:'c', def:'d/e/f' };
+const GROUP_SUB = { a:'rotacja raz / tydzień', b:'rotacja raz / 2 tyg.', c:'rotacja raz / miesiąc', def:'rzadziej niż raz / mies.' };
+const DEFAULT_SLOTS = { a:0, b:0.5, c:0.5, def:0.5 };
+const GROUPS = ['a','b','c','def'];
+
+let DEMAND = {};
+let chartInst = null;
+
+function fmtSlot(v) {
+  if (v === 0) return 'nigdy';
+  return 'co ' + Math.round(1/v) + ' dni';
+}
+// Format slot value for display: integers shown as integer, fractions as decimal
+function fmtSlotVal(v) {
+  if (v === 0) return '0';
+  if (Number.isInteger(v) || v === Math.round(v)) return Math.round(v).toString();
+  return v.toFixed(1);
+}
+function pct(arr, p) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a,b)=>a-b);
+  return s[Math.floor(p/100*(s.length-1))];
+}
+function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+// ── FILE LOADING ─────────────────────────────────────────────────────────────
+function loadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const st = document.getElementById('file-status');
+  st.className = 'file-status';
+  st.textContent = 'Wczytywanie…';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+      DEMAND = parseXlsx(raw);
+      const nd = Object.keys(DEMAND).length;
+      const nr = Object.values(DEMAND).reduce((s,v)=>s+v.length,0);
+      st.className = 'file-status ok';
+      st.textContent = `Wczytano: ${file.name} — ${nd} dni, ${nr} rekordów`;
+      buildAbcControls();
+      go();
+    } catch(err) {
+      st.className = 'file-status err';
+      st.textContent = 'Błąd wczytywania: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseXlsx(raw) {
+  if (!raw || raw.length < 2) throw new Error('Plik pusty lub błędna struktura');
+  const header = raw[0];
+
+  // Find special columns
+  const indeksCol = header.findIndex(h => h && String(h).trim().toLowerCase() === 'indeks');
+  const abcCol = header.findIndex(h => h && String(h).trim().toLowerCase() === 'abc');
+  const ctCol = header.findIndex(h => h && String(h) && String(h).toLowerCase().startsWith('ct'));
+  if (indeksCol === -1 || abcCol === -1 || ctCol === -1)
+    throw new Error('Brak wymaganych kolumn (Indeks, abc, CT [s])');
+
+  // Date columns = all between indeks and abc
+  const dateCols = [];
+  for (let ci = indeksCol+1; ci < Math.min(abcCol, ctCol); ci++) {
+    const h = header[ci];
+    if (h instanceof Date || (typeof h === 'number' && h > 40000)) {
+      dateCols.push({ ci, date: excelDateToISO(h) });
+    }
+  }
+  if (dateCols.length === 0) throw new Error('Nie znaleziono kolumn z datami');
+
+  // Build product catalog from rows
+  const products = {};
+  for (let ri = 1; ri < raw.length; ri++) {
+    const row = raw[ri];
+    const idx = row[indeksCol];
+    if (!idx) continue;
+    const abc = row[abcCol] ? String(row[abcCol]).trim().toLowerCase() : 'f';
+    const ct = parseFloat(row[ctCol]) || 0;
+    products[idx] = { abc, ct_s: ct };
+  }
+
+  // Build demand records
+  const demand = {};
+  for (const { ci, date } of dateCols) {
+    for (let ri = 1; ri < raw.length; ri++) {
+      const row = raw[ri];
+      const val = row[ci];
+      if (val === null || val === undefined || val === 0) continue;
+      const qty = Math.abs(Number(val));
+      if (!qty) continue;
+      const idx = row[indeksCol];
+      if (!idx) continue;
+      const p = products[idx] || { abc:'f', ct_s:0 };
+      if (!demand[date]) demand[date] = {};
+      if (!demand[date][idx]) demand[date][idx] = { indeks:idx, qty:0, abc:p.abc, ct_s:p.ct_s };
+      demand[date][idx].qty += qty;
+    }
+  }
+
+  // Convert to arrays, filter qty>0
+  const out = {};
+  for (const [date, byIdx] of Object.entries(demand)) {
+    const recs = Object.values(byIdx).filter(r => r.qty > 0);
+    if (recs.length) out[date] = recs;
+  }
+  return out;
+}
+
+function excelDateToISO(val) {
+  if (val instanceof Date) {
+    return val.toISOString().slice(0,10);
+  }
+  // Excel serial date
+  const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+  return d.toISOString().slice(0,10);
+}
+
+// ── CONTROLS INIT ────────────────────────────────────────────────────────────
+function calcGroupStats() {
+  const dates = Object.keys(DEMAND);
+  const n = dates.length || 1;
+  const result = {};
+  for (const g of GROUPS) {
+    const abc_vals = g === 'a' ? ['a'] : g === 'b' ? ['b'] : g === 'c' ? ['c'] : ['d','e','f'];
+    let total = 0;
+    for (const d of dates) {
+      for (const r of (DEMAND[d] || [])) {
+        if (abc_vals.includes(r.abc)) total++;
+      }
+    }
+    result[g] = (total / n).toFixed(1);
+  }
+  return result;
+}
+
+// Count unique indices per group across whole dataset
+function countGroupIndices() {
+  const result = {};
+  for (const g of GROUPS) {
+    const abc_vals = g === 'a' ? ['a'] : g === 'b' ? ['b'] : g === 'c' ? ['c'] : ['d','e','f'];
+    const uniq = new Set();
+    for (const recs of Object.values(DEMAND)) {
+      for (const r of recs) {
+        if (abc_vals.includes(r.abc)) uniq.add(r.indeks);
+      }
+    }
+    result[g] = uniq.size;
+  }
+  return result;
+}
+
+function buildAbcControls() {
+  const el = document.getElementById('abc-ctrls');
+  const avgPerDay = calcGroupStats();
+  const totalIndices = countGroupIndices();
+  el.innerHTML = GROUPS.map(g => {
+    const cur = DEFAULT_SLOTS[g];
+    return `
+    <div class="card">
+      <div class="ctrl-head">
+        <div class="dot" style="background:${COLORS[g]}"></div>
+        <div>
+          <div class="ctrl-title">Grupa ${GROUP_LABELS[g]}</div>
+          <div class="ctrl-sub">${GROUP_SUB[g]}</div>
+        </div>
+      </div>
+      <div class="slider-row">
+        <input type="range" id="sl-${g}" min="0" max="10" step="0.1" value="${cur}" oninput="syncFromSlider('${g}',this.value)">
+        <input type="number" class="slider-val" id="sv-${g}" value="${cur}" min="0" max="10" step="0.1" onchange="syncFromInput('${g}',this.value)">
+      </div>
+      <div id="freq-${g}" style="margin-top:6px;font-size:11px;color:var(--text2)">—</div>
+      <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text2)">
+        Śr. <strong style="color:var(--text)">${avgPerDay[g]}</strong> indeksów/dzień &nbsp;·&nbsp; <strong style="color:var(--text)">${totalIndices[g]}</strong> unikalnych indeksów
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── SIMULATION ────────────────────────────────────────────────────────────────
+function simulate(slots, setupMin, netMin, totalSlots) {
+  const dates = Object.keys(DEMAND).sort();
+  const N = dates.length;
+  const setupSec = setupMin * 60;
+  const netSec = netMin * 60;
+
+  const arrivalsByGroup = { a:[], b:[], c:[], def:[] };
+  for (let di = 0; di < N; di++) {
+    const recs = DEMAND[dates[di]] || [];
+    for (const r of recs) {
+      const g = r.abc === 'a' ? 'a' : r.abc === 'b' ? 'b' : r.abc === 'c' ? 'c' : 'def';
+      arrivalsByGroup[g].push({ di, indeks: r.indeks, qty: r.qty, ct_s: r.ct_s });
+    }
+  }
+
+  const waitDays = { a:[], b:[], c:[], def:[] };
+  const dayLoad = [];
+  const carry = { a:0, b:0, c:0, def:0 };
+  const pending = { a:[], b:[], c:[], def:[] };
+  let arrPtr = { a:0, b:0, c:0, def:0 };
+
+  // Sort arrivals within each group by di
+  for (const g of GROUPS) arrivalsByGroup[g].sort((x,y) => x.di - y.di);
+
+  for (let di = 0; di < N; di++) {
+    // Add today's arrivals to pending queues
+    for (const g of GROUPS) {
+      while (arrPtr[g] < arrivalsByGroup[g].length && arrivalsByGroup[g][arrPtr[g]].di === di) {
+        pending[g].push(arrivalsByGroup[g][arrPtr[g]]);
+        arrPtr[g]++;
+      }
+    }
+
+    // Slots per group are fractional (sloty/dzień) with carry-over
+    // Priority order: a > b > c > def; cap at totalSlots
+    let todaySlots = {};
+    let slotsLeft = totalSlots;
+    for (const g of GROUPS) {
+      carry[g] += slots[g];
+      const wanted = Math.floor(carry[g]);
+      const granted = Math.min(wanted, slotsLeft);
+      todaySlots[g] = granted;
+      carry[g] -= granted;
+      slotsLeft -= granted;
+    }
+
+    // Serve pending items (FIFO) and compute production time
+    const prodSec = { a:0, b:0, c:0, def:0 };
+    let setupCount = 0;
+    let timeUsedSec = 0;
+
+    // Pass 1: serve planned slots per group (priority order)
+    // Hard cap: never exceed netSec even for planned slots
+    const servedByGroup = { a:0, b:0, c:0, def:0 };
+    for (const g of GROUPS) {
+      const s = todaySlots[g];
+      let served = 0;
+      while (served < s && pending[g].length > 0) {
+        const item = pending[g][0];
+        const needed = setupSec + item.qty * item.ct_s;
+        if (timeUsedSec + needed > netSec) break;
+        pending[g].shift();
+        waitDays[g].push(di - item.di);
+        prodSec[g] += item.qty * item.ct_s;
+        timeUsedSec += needed;
+        setupCount++;
+        servedByGroup[g]++;
+        served++;
+      }
+    }
+
+    // Pass 2: use remaining time for extra items from queue (any group, FIFO by arrDay)
+    // Build combined queue of all pending items sorted by arrival day
+    const allPending = [];
+    for (const g of GROUPS) {
+      for (const item of pending[g]) allPending.push({ g, item });
+    }
+    allPending.sort((a, b) => a.item.di - b.item.di);
+
+    const toRemove = new Set();
+    for (let pi = 0; pi < allPending.length; pi++) {
+      const { g, item } = allPending[pi];
+      if (toRemove.has(item)) continue;
+      const needed = setupSec + item.qty * item.ct_s;
+      // Hard stop: cannot exceed net time
+      if (timeUsedSec + needed > netSec) continue;
+      toRemove.add(item);
+      const idx = pending[g].indexOf(item);
+      if (idx !== -1) pending[g].splice(idx, 1);
+      waitDays[g].push(di - item.di);
+      prodSec[g] += item.qty * item.ct_s;
+      timeUsedSec += needed;
+      setupCount++;
+      servedByGroup[g]++;
+    }
+
+    const setupTotal = setupCount * setupSec;
+    const totalLoad = Object.values(prodSec).reduce((a,b)=>a+b,0) + setupTotal;
+
+    dayLoad.push({
+      date: dates[di],
+      prodSec,
+      setupSec: setupTotal,
+      totalLoad,
+      netSec,
+      slotsUsed: setupCount,
+      servedByGroup,
+      queueDepth: { a: pending.a.length, b: pending.b.length, c: pending.c.length, def: pending.def.length }
+    });
+  }
+
+  return { dayLoad, waitDays };
+}
+
+// ── EPE CALCULATION ───────────────────────────────────────────────────────────
+function calcEPE(dayLoad, netMin, setupMin) {
+  const n = dayLoad.length;
+  if (!n) return null;
+
+  // Avg daily production load from RAW demand (qty × CT), not simulation output
+  // This reflects true workload regardless of slot settings
+  const dates = Object.keys(DEMAND).sort();
+  const avgProdMin = mean(dates.map(d =>
+    (DEMAND[d] || []).reduce((s, r) => s + r.qty * r.ct_s, 0) / 60
+  ));
+
+  // Time available for changeovers = net time - avg production
+  const timeForSetups = netMin - avgProdMin;
+
+  // Max possible changeovers per day
+  const maxSetups = timeForSetups > 0 ? timeForSetups / setupMin : 0;
+
+  // Avg unique products per day across whole dataset (reuse dates from above)
+  const avgUnique = mean(dates.map(d => (DEMAND[d] || []).length));
+
+  // EPE zaokrąglone w górę do pełnych dni, minimum 1
+  const epeRaw = maxSetups > 0 ? avgUnique / maxSetups : Infinity;
+  const epe = isFinite(epeRaw) ? Math.max(1, Math.ceil(epeRaw)) : Infinity;
+
+  return { avgProdMin, timeForSetups, maxSetups, avgUnique, epeRaw, epe };
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderSumbar(setupMin, netMin, totalSlots) {
+  const setupTot = totalSlots * setupMin;
+  const prodTime = netMin - setupTot;
+  const pct = Math.round(setupTot / netMin * 100);
+  const col = prodTime < 0 ? 'var(--danger)' : 'var(--text)';
+  document.getElementById('sumbar').innerHTML = `
+    <span>Przezbrojenia łącznie: <strong>${setupTot} min</strong> (${totalSlots}×${setupMin} min)</span>
+    <span>Pozostały czas: <strong style="color:${col}">${prodTime} min</strong></span>
+    <span>Udział przezbrojeń: <strong>${pct}%</strong></span>`;
+}
+
+function renderEPE(epe) {
+  if (!epe) return;
+  const steps = document.getElementById('epe-steps');
+  const result = document.getElementById('epe-result');
+  const epeRounded = isFinite(epe.epe) ? epe.epe : null;
+  const epeVal = epeRounded !== null ? epeRounded : '∞';
+  const epeRawStr = isFinite(epe.epeRaw) ? epe.epeRaw.toFixed(2) : '∞';
+  const epeUnit = epeRounded !== null && epeRounded > 0 ? `co ${epeRounded} ${epeRounded === 1 ? 'dzień' : 'dni'}` : '—';
+
+  steps.innerHTML = `
+    <div class="epe-step">
+      <div class="step-n">Krok 1</div>
+      <div class="step-v">${Math.round(epe.avgProdMin)} min</div>
+      <div class="step-d">Średnie dzienne obciążenie produkcją</div>
+    </div>
+    <div class="epe-step">
+      <div class="step-n">Krok 2</div>
+      <div class="step-v">${Math.round(epe.timeForSetups)} min</div>
+      <div class="step-d">Czas dostępny na przezbrojenia</div>
+    </div>
+    <div class="epe-step">
+      <div class="step-n">Krok 3</div>
+      <div class="step-v">${epe.maxSetups.toFixed(2)}${epe.maxSetups < 1 ? ' <span style="font-size:12px;font-weight:400;color:var(--text2)">(co ' + Math.round(1/epe.maxSetups) + ' dni)</span>' : '/dzień'}</div>
+      <div class="step-d">Możliwa liczba przezbrojeń / dzień</div>
+    </div>
+    <div class="epe-step">
+      <div class="step-n">Krok 4</div>
+      <div class="step-v">${epe.avgUnique.toFixed(1)}</div>
+      <div class="step-d">Średnia liczba indeksów / dzień</div>
+    </div>`;
+
+  result.innerHTML = `
+    <div class="epe-val">${epeVal}</div>
+    <div class="epe-desc">
+      <strong>EPE = ${epeVal} dni</strong> — zamówienia/zlecenia mogą być realizowane ${epeUnit}.<br>
+      Wynik surowy: ${epe.avgUnique.toFixed(1)} / ${epe.maxSetups.toFixed(1)} = ${epeRawStr} → zaokrąglone w górę do ${epeVal}
+    </div>`;
+}
+
+let utilChartInst = null;
+
+function renderUtilization(dayLoad, netMin, availMin, stopsMin, oeeT) {
+  const sec = document.getElementById('utilization-section');
+  if (!dayLoad || !dayLoad.length) { sec.style.display='none'; return; }
+  sec.style.display = '';
+
+  const n = dayLoad.length;
+  const netSec = netMin * 60;
+  const availSec   = (availMin || netMin) * 60;
+  const stopsSec   = (stopsMin || 0) * 60;
+  const oeeRatio   = (oeeT || 100) / 100;
+  const netBeforeOEE = availSec - stopsSec;
+  const oeeLossSec = netBeforeOEE * (1 - oeeRatio);
+
+  const avgProdSec  = dayLoad.reduce((s,d) => s + (d.totalLoad - (d.setupSec||0)), 0) / n;
+  const avgSetupSec = dayLoad.reduce((s,d) => s + (d.setupSec||0), 0) / n;
+  const avgTotalSec = dayLoad.reduce((s,d) => s + d.totalLoad, 0) / n;
+  const avgIdleSec  = Math.max(0, netSec - avgTotalSec);
+
+  const avgProdMin  = avgProdSec  / 60;
+  const avgSetupMin = avgSetupSec / 60;
+  const avgIdleMin  = avgIdleSec  / 60;
+
+  const pProd  = avgProdSec  / netSec * 100;
+  const pSetup = avgSetupSec / netSec * 100;
+  const pIdle  = avgIdleSec  / netSec * 100;
+
+  // Donut chart
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const canvas = document.getElementById('utilChart');
+
+  if (utilChartInst) { utilChartInst.destroy(); utilChartInst = null; }
+
+  utilChartInst = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['Planowane przestoje', 'Straty OEE T', 'Produkcja', 'Przezbrojenia', 'Czas bez planu'],
+      datasets: [{
+        data: [
+          +(stopsSec/60).toFixed(1),
+          +(oeeLossSec/60).toFixed(1),
+          +avgProdMin.toFixed(1),
+          +avgSetupMin.toFixed(1),
+          +avgIdleMin.toFixed(1)
+        ],
+        backgroundColor: ['#3266ad', '#d4537e', '#1d9e75', '#d85a30', isDark ? '#3a3a38' : '#d3d1c7'],
+        borderWidth: 0,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(0)} min (${(ctx.parsed/(availMin||netMin)*100).toFixed(1)}%)`
+          }
+        }
+      }
+    }
+  });
+
+  // Stats panel
+  const statsEl = document.getElementById('util-stats');
+  const row = (color, label, min, pct) => `
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:12px;height:12px;border-radius:3px;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;font-size:13px;color:var(--text2)">${label}</div>
+      <div style="text-align:right">
+        <span style="font-size:16px;font-weight:500;color:var(--text)">${min.toFixed(0)} min</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:4px">${pct.toFixed(1)}%</span>
+      </div>
+    </div>`;
+
+  const overDays = dayLoad.filter(d => d.totalLoad > d.netSec).length;
+
+  // All layers relative to availMin (100%)
+  const pStops   = stopsSec   / availSec * 100;
+  const pOEEloss = oeeLossSec / availSec * 100;
+  const pProd2   = avgProdSec  / availSec * 100;
+  const pSetup2  = avgSetupSec / availSec * 100;
+  const pIdle2   = avgIdleSec  / availSec * 100;
+
+  statsEl.innerHTML =
+    row('#3266ad', 'Planowane przestoje (śr./dzień)',         stopsMin,              pStops)   +
+    row('#d4537e', 'Straty OEE T (śr./dzień)',                oeeLossSec/60,         pOEEloss) +
+    row('#1d9e75', 'Czysta produkcja (śr./dzień)',            avgProdMin,            pProd2)   +
+    row('#d85a30', 'Przezbrojenia (śr./dzień)',               avgSetupMin,           pSetup2)  +
+    row(isDark?'#3a3a38':'#d3d1c7', 'Czas bez planu (śr./dzień)', avgIdleMin,        pIdle2)   +
+    `<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text2)">
+      Łącznie dni: <strong style="color:var(--text)">${n}</strong> &nbsp;·&nbsp;
+      Dni z przekroczeniem czasu: <strong style="color:${overDays>0?'var(--danger)':'var(--text)'}">${overDays}</strong>
+    </div>`;
+}
+
+
+function renderCards(waitDays, slots) {
+  const el = document.getElementById('result-cards');
+  el.innerHTML = GROUPS.map(g => {
+    const wd = waitDays[g];
+    const s = slots[g];
+    const avg = s === 0 ? '—' : mean(wd).toFixed(1) + ' dni';
+    const mx = s === 0 ? 'brak slotów' : 'maks. ' + (wd.length ? Math.max(...wd) : 0) + ' dni';
+    return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]}">
+      <div class="val">${avg}</div>
+      <div class="lbl">Gr. ${GROUP_LABELS[g]} — śr. oczekiwanie</div>
+      <div class="sub">${mx}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderChart(dayLoad, netMin) {
+  const toMin = v => +(v / 60).toFixed(1);
+  const labels = dayLoad.map(d => d.date.slice(5));
+  const W = Math.max(900, dayLoad.length * 5);
+  const canvas = document.getElementById('loadChart');
+  canvas.width = W;
+  canvas.style.width = W + 'px';
+  canvas.height = 280;
+  canvas.style.height = '280px';
+
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+  const tickColor = isDark ? '#6e6c64' : '#8c8b84';
+  const lineColor = '#d85a30';
+
+  chartInst = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'gr. a',     data: dayLoad.map(d=>toMin(d.prodSec.a||0)),   backgroundColor:'#3266ad', stack:'s' },
+        { label:'gr. b',     data: dayLoad.map(d=>toMin(d.prodSec.b||0)),   backgroundColor:'#1d9e75', stack:'s' },
+        { label:'gr. c',     data: dayLoad.map(d=>toMin(d.prodSec.c||0)),   backgroundColor:'#d85a30', stack:'s' },
+        { label:'gr. d/e/f', data: dayLoad.map(d=>toMin(d.prodSec.def||0)), backgroundColor:'#888780', stack:'s' },
+        { label:'Przezbrojenia', data: dayLoad.map(d=>toMin(d.setupSec||0)), backgroundColor:'rgba(216,90,48,0.28)', stack:'s' },
+        { label:'Dostępny czas',
+          data: dayLoad.map(() => netMin),
+          type: 'line',
+          borderColor: lineColor,
+          borderWidth: 1.5,
+          borderDash: [5,4],
+          pointRadius: 0,
+          fill: false,
+          order: -1,
+          tension: 0
+        }
+      ]
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            title: items => {
+              const i = items[0].dataIndex;
+              const d = dayLoad[i];
+              const overload = d.totalLoad > d.netSec;
+              return d.date + (overload ? '  ⚠ przekroczenie czasu!' : '');
+            },
+            beforeBody: items => {
+              const i = items[0].dataIndex;
+              const d = dayLoad[i];
+              const s = d.servedByGroup || {};
+              const lines = [
+                `Przezbrojenia: ${d.slotsUsed}`,
+                `  gr. a: ${s.a||0} ind.  |  gr. b: ${s.b||0} ind.`,
+                `  gr. c: ${s.c||0} ind.  |  gr. d/e/f: ${s.def||0} ind.`,
+                `Obciążenie: ${Math.round(d.totalLoad/60)} / ${Math.round(d.netSec/60)} min`,
+                '─────────────────────'
+              ];
+              return lines;
+            },
+            label: ctx => {
+              if (ctx.dataset.type === 'line') return null;
+              if (ctx.parsed.y === 0) return null;
+              return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} min`;
+            },
+            filter: item => item.parsed.y > 0 || item.dataset.type === 'line'
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: tickColor, font: { size: 9 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 50 },
+          grid: { display: false }
+        },
+        y: {
+          stacked: true,
+          title: { display: true, text: 'czas [min]', font: { size: 11 }, color: tickColor },
+          ticks: { color: tickColor, font: { size: 10 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(waitDays, slots) {
+  let html = `<table><thead><tr>
+    <th>Grupa</th><th>Częstotliwość</th><th>Zleceń</th>
+    <th>P50</th><th>P75</th><th>P90</th><th>P95</th><th>Maks.</th>
+  </tr></thead><tbody>`;
+  for (const g of GROUPS) {
+    const s = slots[g];
+    const wd = waitDays[g];
+    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[g]};margin-right:6px;vertical-align:middle"></span>`;
+    if (s === 0) {
+      html += `<tr><td>${dot}${GROUP_LABELS[g]}</td><td style="color:var(--text3)">nigdy</td><td>${wd.length}</td>${[0,0,0,0].map(()=>'<td style="color:var(--text3)">—</td>').join('')}<td style="color:var(--text3)">—</td></tr>`;
+    } else {
+      html += `<tr><td>${dot}${GROUP_LABELS[g]}</td><td>${fmtSlotVal(s)}${s>0&&s<1?" slot/dzień":""}${s>=1?" ind./dzień":""}</td><td>${wd.length}</td>
+        ${[50,75,90,95].map(p=>`<td><strong>${pct(wd,p)}</strong></td>`).join('')}
+        <td>${wd.length ? Math.max(...wd) : 0}</td></tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  document.getElementById('ptable').innerHTML = html;
+}
+
+
+// ── SLIDER SYNC ───────────────────────────────────────────────────────────────
+// Machine sliders: id suffix matches 'total', 'setup', 'net'
+// Group sliders: id suffix matches 'a', 'b', 'c', 'def'
+function syncFromSlider(id, val) {
+  const inp = document.getElementById('sv-' + id);
+  if (inp) inp.value = val;
+  go();
+}
+function syncFromInput(id, val) {
+  const slider = document.getElementById('sl-' + id);
+  if (!slider) return;
+  const mn = parseFloat(slider.min), mx = parseFloat(slider.max), st = parseFloat(slider.step);
+  let v = parseFloat(val);
+  if (isNaN(v)) return;
+  v = Math.max(mn, Math.min(mx, v));
+  // Snap to step
+  v = Math.round(v / st) * st;
+  v = +v.toFixed(10); // fix float precision
+  slider.value = v;
+  const inp = document.getElementById('sv-' + id);
+  if (inp) inp.value = v;
+  go();
+}
+
+// ── MAIN GO ───────────────────────────────────────────────────────────────────
+function go() {
+  const availMin  = parseInt(document.getElementById('sl-avail').value)  || 480;
+  const stopsMin  = parseInt(document.getElementById('sl-stops').value)  || 30;
+  const oeeT      = parseInt(document.getElementById('sl-oee').value)    || 80;
+  const setupMin  = parseInt(document.getElementById('sl-setup').value)  || 29;
+  const netMin    = Math.round((availMin - stopsMin) * oeeT / 100);
+  const totalSlots = 99; // no longer user-controlled; EPE limit used instead
+
+  document.getElementById('sv-avail').value = availMin;
+  document.getElementById('sv-stops').value = stopsMin;
+  document.getElementById('sv-oee').value   = oeeT;
+  document.getElementById('sv-setup').value = setupMin;
+
+  // Show computed net time
+  const netEl = document.getElementById('net-display');
+  if (netEl) netEl.innerHTML = `
+    <span style="font-size:14px;font-weight:500;color:var(--text)">Dostępny czas na produkcję: (${availMin} − ${stopsMin}) × ${oeeT}% = <span style="color:var(--blue)">${netMin} min/dzień</span></span>`;
+
+  // Read fractional slot counts per group
+  const slots = {};
+  for (const g of GROUPS) {
+    slots[g] = parseFloat(document.getElementById('sl-' + g).value) || 0;
+    document.getElementById('sv-' + g).value = slots[g];
+  }
+
+  const warnTime = document.getElementById('warn-time');
+  if (netMin <= 0) {
+    warnTime.style.display = 'block';
+    warnTime.textContent = `Dostępny czas na produkcję wynosi ${netMin} min — sprawdź parametry.`;
+  } else {
+    warnTime.style.display = 'none';
+  }
+
+  // sumbar removed - net time shown in net-display above
+
+  if (!Object.keys(DEMAND).length) return;
+
+  const { dayLoad, waitDays } = simulate(slots, setupMin, netMin, totalSlots);
+  const epe = calcEPE(dayLoad, netMin, setupMin);
+
+  // Compute slot limit from EPE and update displays
+  const slotLimit = epe ? +epe.maxSetups.toFixed(1) : totalSlots;
+  const slotLimitEl = document.getElementById('slot-limit-display');
+  const slotUsedEl = document.getElementById('slot-used-display');
+  if (slotLimitEl) slotLimitEl.textContent = slotLimit.toFixed(1) + ' przezbrojeń/dzień';
+  const totalUsed = +GROUPS.reduce((s,g) => s + slots[g], 0).toFixed(1);
+  if (slotUsedEl) {
+    slotUsedEl.textContent = fmtSlotVal(totalUsed);
+    slotUsedEl.style.color = totalUsed > slotLimit ? 'var(--danger)' : 'var(--text)';
+  }
+
+  // Update slot max on sliders and warn if exceeded
+  for (const g of GROUPS) {
+    document.getElementById('sl-' + g).max = slotLimit;
+    document.getElementById('sv-' + g).max = slotLimit;
+  }
+
+  const warnSlots = document.getElementById('warn-slots');
+  if (totalUsed > slotLimit + 0.05) {
+    warnSlots.style.display = 'block';
+    warnSlots.textContent = `Suma slotów grup (${fmtSlotVal(totalUsed)}) przekracza limit EPE (${slotLimit.toFixed(1)} przezbrojeń/dzień).`;
+  } else {
+    warnSlots.style.display = 'none';
+  }
+
+  // Update frequency display per group
+  const totalIndices = countGroupIndices();
+  for (const g of GROUPS) {
+    const el = document.getElementById('freq-' + g);
+    if (!el) continue;
+    const s = slots[g];
+    const n = totalIndices[g];
+    if (s === 0 || n === 0) {
+      el.innerHTML = '<span style="color:var(--text3)">nie produkowane</span>';
+    } else {
+      const slotStr = s < 1
+        ? `${fmtSlotVal(s)} slotu/dzień <span style="color:var(--text3)">(1 przezbrojenie co ${Math.round(1/s)} dni)</span>`
+        : `${fmtSlotVal(s)} slot${s===1?'':'ów'}/dzień`;
+      const freqDays = n / s;
+      const freqStr = freqDays <= 1 ? 'codziennie' : `co ${freqDays.toFixed(1)} dnia`;
+      el.innerHTML = `${slotStr}<br>EPE grupy = <strong style="color:var(--text)">${Math.ceil(freqDays)} dni</strong>`;
+    }
+  }
+
+  renderEPE(epe);
+  renderChart(dayLoad, netMin);
+  renderUtilization(dayLoad, netMin, availMin, stopsMin, oeeT);
+  renderCards(waitDays, slots);
+  renderTable(waitDays, slots);
+}
+
+// ── DRAG & DROP ───────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.background='var(--surface2)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.background=''; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.background = '';
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const inp = document.getElementById('file-input');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    inp.files = dt.files;
+    loadFile(inp);
+  }
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+try {
+  DEMAND = JSON.parse(DEFAULT_DATA_JSON);
+} catch(e) {
+  console.warn('Default data parse error', e);
+}
+buildAbcControls();
+go();
+</script>
+</body>
+</html>
