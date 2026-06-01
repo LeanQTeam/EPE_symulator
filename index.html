@@ -218,22 +218,22 @@ tr:hover td { background: var(--surface2); }
     <div class="card">
       <div class="ctrl-head"><div class="ctrl-title">Dostępny czas na dzień [min]</div></div>
       <div class="slider-row">
-        <input type="range" id="sl-avail" min="60" max="1440" step="60" value="480" oninput="syncFromSlider('avail',this.value)">
-        <input type="number" class="slider-val" id="sv-avail" value="480" min="60" max="1440" step="60" onchange="syncFromInput('avail',this.value)">
+        <input type="range" id="sl-avail" min="60" max="1440" step="60" value="960" oninput="syncFromSlider('avail',this.value)">
+        <input type="number" class="slider-val" id="sv-avail" value="960" min="60" max="1440" step="60" onchange="syncFromInput('avail',this.value)">
       </div>
     </div>
     <div class="card">
       <div class="ctrl-head"><div class="ctrl-title">Planowane przestoje [min/dzień]</div></div>
       <div class="slider-row">
-        <input type="range" id="sl-stops" min="0" max="360" step="5" value="30" oninput="syncFromSlider('stops',this.value)">
-        <input type="number" class="slider-val" id="sv-stops" value="30" min="0" max="360" step="5" onchange="syncFromInput('stops',this.value)">
+        <input type="range" id="sl-stops" min="0" max="360" step="5" value="150" oninput="syncFromSlider('stops',this.value)">
+        <input type="number" class="slider-val" id="sv-stops" value="150" min="0" max="360" step="5" onchange="syncFromInput('stops',this.value)">
       </div>
     </div>
     <div class="card">
       <div class="ctrl-head"><div class="ctrl-title">OEE T (bez przezbrojeń) [%]</div></div>
       <div class="slider-row">
-        <input type="range" id="sl-oee" min="10" max="100" step="1" value="80" oninput="syncFromSlider('oee',this.value)">
-        <input type="number" class="slider-val" id="sv-oee" value="80" min="10" max="100" step="1" onchange="syncFromInput('oee',this.value)">
+        <input type="range" id="sl-oee" min="10" max="100" step="1" value="55" oninput="syncFromSlider('oee',this.value)">
+        <input type="number" class="slider-val" id="sv-oee" value="55" min="10" max="100" step="1" onchange="syncFromInput('oee',this.value)">
       </div>
     </div>
     <div class="card">
@@ -252,6 +252,7 @@ tr:hover td { background: var(--surface2); }
   <div class="epe-title">Wskaźnik EPE (Every Part Every…)</div>
   <div class="epe-steps" id="epe-steps"></div>
   <div class="epe-result" id="epe-result"></div>
+
 </div>
 
 <div class="section">
@@ -310,7 +311,7 @@ const DEFAULT_DATA_JSON = '{"2025-05-05":[{"indeks":"PEPCPQM7XX052","qty":24,"ab
 const COLORS = { a:'#3266ad', b:'#1d9e75', c:'#d85a30', def:'#888780' };
 const GROUP_LABELS = { a:'a', b:'b', c:'c', def:'d/e/f' };
 const GROUP_SUB = { a:'rotacja raz / tydzień', b:'rotacja raz / 2 tyg.', c:'rotacja raz / miesiąc', def:'rzadziej niż raz / mies.' };
-const DEFAULT_SLOTS = { a:0, b:0.5, c:0.5, def:0.5 };
+const DEFAULT_SLOTS = { a:0, b:0.5, c:0.5, def:0.5 }; // overridden by applyDefaultSlots()
 const GROUPS = ['a','b','c','def'];
 
 let DEMAND = {};
@@ -352,6 +353,7 @@ function loadFile(input) {
       st.className = 'file-status ok';
       st.textContent = `Wczytano: ${file.name} — ${nd} dni, ${nr} rekordów`;
       buildAbcControls();
+      applyDefaultSlots();
       go();
     } catch(err) {
       st.className = 'file-status err';
@@ -644,6 +646,110 @@ function renderSumbar(setupMin, netMin, totalSlots) {
     <span>Pozostały czas: <strong style="color:${col}">${prodTime} min</strong></span>
     <span>Udział przezbrojeń: <strong>${pct}%</strong></span>`;
 }
+
+function calcSuggestedSlots(maxSetups) {
+  // Get avg indeksy/dzień per group from raw demand
+  const dates = Object.keys(DEMAND);
+  const n = dates.length || 1;
+  const avgByGroup = {};
+  for (const g of GROUPS) {
+    const abc_vals = g==='a'?['a']:g==='b'?['b']:g==='c'?['c']:['d','e','f'];
+    let total = 0;
+    for (const d of dates)
+      for (const r of (DEMAND[d]||[]))
+        if (abc_vals.includes(r.abc)) total++;
+    avgByGroup[g] = total / n;
+  }
+
+  // Greedy allocation: assign min(avg, remaining) per group, priority a>b>c>def
+  // Step 0.1 resolution
+  const step = 0.1;
+  let remaining = maxSetups;
+  const suggested = {};
+  for (const g of GROUPS) {
+    const want = avgByGroup[g];
+    // Round to nearest step, capped by remaining
+    const raw = Math.min(want, remaining);
+    const snapped = Math.round(raw / step) * step;
+    suggested[g] = +snapped.toFixed(1);
+    remaining = Math.max(0, +(remaining - suggested[g]).toFixed(2));
+  }
+
+  // Compute EPE per group
+  const totalIndices = countGroupIndices();
+  const epeByGroup = {};
+  for (const g of GROUPS) {
+    const s = suggested[g];
+    const ni = totalIndices[g];
+    epeByGroup[g] = (s > 0 && ni > 0) ? Math.ceil(ni / s) : null;
+  }
+
+  return { suggested, avgByGroup, epeByGroup };
+}
+
+function renderEPEGroups(maxSetups) {
+  const box = document.getElementById('epe-groups');
+  const content = document.getElementById('epe-groups-content');
+  if (!box || !content) return;
+
+  if (!Object.keys(DEMAND).length || maxSetups <= 0) { box.style.display='none'; return; }
+  box.style.display = '';
+
+  const { suggested, avgByGroup, epeByGroup } = calcSuggestedSlots(maxSetups);
+
+  content.innerHTML = GROUPS.map(g => {
+    const s = suggested[g];
+    const avg = avgByGroup[g];
+    const epe = epeByGroup[g];
+    const slotStr = s < 1 && s > 0
+      ? `${s} slotu/dzień<br><span style="color:var(--text3);font-size:10px">co ${Math.round(1/s)} dni</span>`
+      : `${s} slot${s===1?'':'ów'}/dzień`;
+    const epeStr = epe !== null ? `EPE = <strong>${epe} dni</strong>` : '<span style="color:var(--text3)">nie produkowane</span>';
+    const diff = s - avg;
+    const diffStr = Math.abs(diff) < 0.05 ? '' :
+      `<span style="font-size:10px;color:${diff<0?'var(--danger)':'var(--text3)'}">
+        ${diff>0?'+':''}${diff.toFixed(1)} vs śr. ${avg.toFixed(1)}/dzień
+      </span>`;
+    return `<div style="background:var(--surface2);border-radius:var(--radius);padding:10px 12px;border-left:3px solid ${COLORS[g]}">
+      <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:4px">gr. ${GROUP_LABELS[g]}</div>
+      <div style="font-size:13px;color:var(--text);margin-bottom:2px">${slotStr}</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${epeStr}</div>
+      ${diffStr}
+    </div>`;
+  }).join('');
+
+  // Add apply button
+  const applyId = 'apply-suggested-slots';
+  if (!document.getElementById(applyId)) {
+    const btn = document.createElement('button');
+    btn.id = applyId;
+    btn.textContent = 'Zastosuj sugerowane sloty ↗';
+    btn.style.cssText = 'margin-top:10px;font-size:12px;padding:6px 14px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--surface);color:var(--blue);cursor:pointer;font-family:inherit';
+    btn.onclick = () => {
+      for (const g of GROUPS) {
+        const slider = document.getElementById('sl-' + g);
+        const inp = document.getElementById('sv-' + g);
+        if (slider && inp) {
+          slider.value = suggested[g];
+          inp.value = suggested[g];
+        }
+      }
+      go();
+    };
+    box.appendChild(btn);
+  } else {
+    // Update onclick closure with latest suggested
+    document.getElementById(applyId).onclick = () => {
+      for (const g of GROUPS) {
+        const slider = document.getElementById('sl-' + g);
+        const inp = document.getElementById('sv-' + g);
+        if (slider && inp) { slider.value = suggested[g]; inp.value = suggested[g]; }
+      }
+      go();
+    };
+  }
+}
+
 
 function renderEPE(epe) {
   if (!epe) return;
@@ -1049,6 +1155,37 @@ dropZone.addEventListener('drop', e => {
   }
 });
 
+
+function applyDefaultSlots() {
+  // Compute maxSetups from current params without full simulation
+  const availMin = parseInt(document.getElementById('sl-avail').value) || 960;
+  const stopsMin = parseInt(document.getElementById('sl-stops').value) || 150;
+  const oeeT     = parseInt(document.getElementById('sl-oee').value)   || 55;
+  const setupMin = parseInt(document.getElementById('sl-setup').value) || 29;
+  const netMin   = Math.round((availMin - stopsMin) * oeeT / 100);
+
+  // Estimate avgProdMin from raw demand
+  const dates = Object.keys(DEMAND);
+  if (!dates.length) return;
+  const n = dates.length;
+  const avgProdSec = dates.reduce((s, d) =>
+    s + (DEMAND[d]||[]).reduce((ss, r) => ss + r.qty * r.ct_s, 0), 0) / n;
+  const avgProdMin = avgProdSec / 60;
+  const timeForSetups = netMin - avgProdMin;
+  const maxSetups = timeForSetups > 0 ? timeForSetups / setupMin : 0;
+
+  const { suggested } = calcSuggestedSlots(maxSetups);
+
+  for (const g of GROUPS) {
+    const slider = document.getElementById('sl-' + g);
+    const inp    = document.getElementById('sv-' + g);
+    if (slider && inp) {
+      slider.max   = Math.max(suggested[g], parseFloat(slider.max) || 10);
+      slider.value = suggested[g];
+      inp.value    = suggested[g];
+    }
+  }
+}
 // ── INIT ──────────────────────────────────────────────────────────────────────
 try {
   DEMAND = JSON.parse(DEFAULT_DATA_JSON);
@@ -1056,6 +1193,7 @@ try {
   console.warn('Default data parse error', e);
 }
 buildAbcControls();
+applyDefaultSlots();
 go();
 </script>
 </body>
