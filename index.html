@@ -268,8 +268,14 @@ tr:hover td { background: var(--surface2); }
 </div>
 
 <div class="section">
-  <div class="section-title">Plan produkcji grup ABC</div>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Limit slotów z kalkulacji EPE: <strong id="slot-limit-display" style="color:var(--text)">—</strong> przezbrojeń/dzień &nbsp;·&nbsp; Przydzielono: <strong id="slot-used-display" style="color:var(--text)">0</strong></div>
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;flex-wrap:wrap">
+    <div class="section-title" style="margin-bottom:0">Plan produkcji grup ABC</div>
+    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--text2)">
+      <input type="checkbox" id="cb-freerun" onchange="go()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)">
+      <span>Bez podziału na grupy — realizuj zamówienia wg kolejności (FIFO)</span>
+    </label>
+  </div>
+  <div id="abc-plan-info" style="font-size:12px;color:var(--text2);margin-bottom:8px">Limit slotów z kalkulacji EPE: <strong id="slot-limit-display" style="color:var(--text)">—</strong> przezbrojeń/dzień &nbsp;·&nbsp; Przydzielono: <strong id="slot-used-display" style="color:var(--text)">0</strong></div>
   <div class="grid-4" id="abc-ctrls"></div>
   <div class="alert warn" id="warn-slots"></div>
 </div>
@@ -505,7 +511,7 @@ function buildAbcControls() {
 }
 
 // ── SIMULATION ────────────────────────────────────────────────────────────────
-function simulate(slots, setupMin, netMin, totalSlots, growth) {
+function simulate(slots, setupMin, netMin, totalSlots, growth, freerun) {
   const dates = Object.keys(DEMAND).sort();
   const N = dates.length;
   const setupSec = setupMin * 60;
@@ -539,17 +545,22 @@ function simulate(slots, setupMin, netMin, totalSlots, growth) {
       }
     }
 
-    // Slots per group are fractional (sloty/dzień) with carry-over
-    // Priority order: a > b > c > def; cap at totalSlots
+    // Determine today's slots per group
     let todaySlots = {};
-    let slotsLeft = totalSlots;
-    for (const g of GROUPS) {
-      carry[g] += slots[g];
-      const wanted = Math.floor(carry[g]);
-      const granted = Math.min(wanted, slotsLeft);
-      todaySlots[g] = granted;
-      carry[g] -= granted;
-      slotsLeft -= granted;
+    if (freerun) {
+      // Freerun: no group limits — pass 1 serves nothing, pass 2 fills all available time
+      for (const g of GROUPS) todaySlots[g] = 0;
+    } else {
+      // Priority order: a > b > c > def; cap at totalSlots
+      let slotsLeft = totalSlots;
+      for (const g of GROUPS) {
+        carry[g] += slots[g];
+        const wanted = Math.floor(carry[g]);
+        const granted = Math.min(wanted, slotsLeft);
+        todaySlots[g] = granted;
+        carry[g] -= granted;
+        slotsLeft -= granted;
+      }
     }
 
     // Serve pending items (FIFO) and compute production time
@@ -899,19 +910,40 @@ function renderUtilization(dayLoad, netMin, availMin, stopsMin, oeeT, growth) {
 }
 
 
-function renderCards(waitDays, slots) {
+function renderCards(waitDays, slots, freerun) {
   const el = document.getElementById('result-cards');
-  el.innerHTML = GROUPS.map(g => {
-    const wd = waitDays[g];
-    const s = slots[g];
-    const avg = s === 0 ? '—' : mean(wd).toFixed(1) + ' dni';
-    const mx = s === 0 ? 'brak slotów' : 'maks. ' + (wd.length ? Math.max(...wd) : 0) + ' dni';
-    return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]}">
+  if (freerun) {
+    // Global single card
+    const allWait = [...waitDays.a, ...waitDays.b, ...waitDays.c, ...waitDays.def];
+    const avg = allWait.length ? mean(allWait).toFixed(1) + ' dni' : '—';
+    const mx  = allWait.length ? 'maks. ' + Math.max(...allWait) + ' dni' : '—';
+    el.innerHTML = `<div class="card-metric" style="border-left:3px solid var(--blue)">
       <div class="val">${avg}</div>
-      <div class="lbl">Gr. ${GROUP_LABELS[g]} — śr. oczekiwanie</div>
+      <div class="lbl">Globalnie — śr. oczekiwanie (FIFO)</div>
       <div class="sub">${mx}</div>
-    </div>`;
-  }).join('');
+    </div>` + GROUPS.map(g => {
+      const wd = waitDays[g];
+      const avg2 = wd.length ? mean(wd).toFixed(1) + ' dni' : '—';
+      const mx2  = wd.length ? 'maks. ' + Math.max(...wd) + ' dni' : '—';
+      return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]};opacity:0.5">
+        <div class="val" style="font-size:16px">${avg2}</div>
+        <div class="lbl">Gr. ${GROUP_LABELS[g]}</div>
+        <div class="sub">${mx2}</div>
+      </div>`;
+    }).join('');
+  } else {
+    el.innerHTML = GROUPS.map(g => {
+      const wd = waitDays[g];
+      const s = slots[g];
+      const avg = s === 0 ? '—' : mean(wd).toFixed(1) + ' dni';
+      const mx = s === 0 ? 'brak slotów' : 'maks. ' + (wd.length ? Math.max(...wd) : 0) + ' dni';
+      return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]}">
+        <div class="val">${avg}</div>
+        <div class="lbl">Gr. ${GROUP_LABELS[g]} — śr. oczekiwanie</div>
+        <div class="sub">${mx}</div>
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderChart(dayLoad, netMin) {
@@ -1009,19 +1041,28 @@ function renderChart(dayLoad, netMin) {
   });
 }
 
-function renderTable(waitDays, slots) {
+function renderTable(waitDays, slots, freerun) {
+  const allWaitT = [...waitDays.a, ...waitDays.b, ...waitDays.c, ...waitDays.def];
   let html = `<table><thead><tr>
-    <th>Grupa</th><th>Częstotliwość</th><th>Zleceń</th>
+    <th>Grupa</th><th>${freerun ? 'Tryb' : 'Częstotliwość'}</th><th>Zleceń</th>
     <th>P50</th><th>P75</th><th>P90</th><th>P95</th><th>Maks.</th>
   </tr></thead><tbody>`;
+  if (freerun && allWaitT.length) {
+    html += `<tr style="font-weight:500;background:var(--surface2)">
+      <td>Globalnie</td><td>FIFO</td><td>${allWaitT.length}</td>
+      ${[50,75,90,95].map(p=>`<td><strong>${pct(allWaitT,p)}</strong></td>`).join('')}
+      <td>${Math.max(...allWaitT)}</td></tr>`;
+  }
   for (const g of GROUPS) {
     const s = slots[g];
     const wd = waitDays[g];
     const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[g]};margin-right:6px;vertical-align:middle"></span>`;
-    if (s === 0) {
-      html += `<tr><td>${dot}${GROUP_LABELS[g]}</td><td style="color:var(--text3)">nigdy</td><td>${wd.length}</td>${[0,0,0,0].map(()=>'<td style="color:var(--text3)">—</td>').join('')}<td style="color:var(--text3)">—</td></tr>`;
+    const rowOp = freerun ? ' style="opacity:0.45"' : '';
+    if (s === 0 && !freerun) {
+      html += `<tr${rowOp}><td>${dot}${GROUP_LABELS[g]}</td><td style="color:var(--text3)">nigdy</td><td>${wd.length}</td>${[0,0,0,0].map(()=>'<td style="color:var(--text3)">—</td>').join('')}<td style="color:var(--text3)">—</td></tr>`;
     } else {
-      html += `<tr><td>${dot}${GROUP_LABELS[g]}</td><td>${fmtSlotVal(s)}${s>0&&s<1?" slot/dzień":""}${s>=1?" ind./dzień":""}</td><td>${wd.length}</td>
+      const freqCell = freerun ? '—' : `${s} ind./dzień`;
+      html += `<tr${rowOp}><td>${dot}${GROUP_LABELS[g]}</td><td>${freqCell}</td><td>${wd.length}</td>
         ${[50,75,90,95].map(p=>`<td><strong>${pct(wd,p)}</strong></td>`).join('')}
         <td>${wd.length ? Math.max(...wd) : 0}</td></tr>`;
     }
@@ -1096,7 +1137,18 @@ function go() {
 
   if (!Object.keys(DEMAND).length) return;
 
-  const { dayLoad, waitDays } = simulate(slots, setupMin, netMin, totalSlots, growth);
+  const freerun = document.getElementById('cb-freerun')?.checked || false;
+
+  // Grey out ABC controls in freerun mode
+  const abcCtrls = document.getElementById('abc-ctrls');
+  const abcInfo  = document.getElementById('abc-plan-info');
+  const warnSl   = document.getElementById('warn-slots');
+  if (abcCtrls) abcCtrls.style.opacity = freerun ? '0.35' : '1';
+  if (abcCtrls) abcCtrls.style.pointerEvents = freerun ? 'none' : '';
+  if (abcInfo)  abcInfo.style.display = freerun ? 'none' : '';
+  if (warnSl)   warnSl.style.display  = freerun ? 'none' : (warnSl.style.display || '');
+
+  const { dayLoad, waitDays } = simulate(slots, setupMin, netMin, totalSlots, growth, freerun);
   const epe = calcEPE(dayLoad, netMin, setupMin, growth);
 
   // Compute slot limit from EPE and update displays
@@ -1143,8 +1195,8 @@ function go() {
   renderEPE(epe);
   renderChart(dayLoad, netMin);
   renderUtilization(dayLoad, netMin, availMin, stopsMin, oeeT, growth);
-  renderCards(waitDays, slots);
-  renderTable(waitDays, slots);
+  renderCards(waitDays, slots, freerun);
+  renderTable(waitDays, slots, freerun);
 }
 
 // ── DRAG & DROP ───────────────────────────────────────────────────────────────
