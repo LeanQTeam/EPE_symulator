@@ -287,7 +287,7 @@ tr:hover td { background: var(--surface2); }
       <span id="cb-freerun-label">Bez podziału na grupy — realizuj zamówienia wg kolejności (FIFO)</span>
     </label>
   </div>
-  <div id="abc-plan-info" style="font-size:0.857em;color:var(--text2);margin-bottom:8px">Limit slotów z kalkulacji EPE: <strong id="slot-limit-display" style="color:var(--text)">—</strong> przezbrojeń/dzień &nbsp;·&nbsp; Przydzielono: <strong id="slot-used-display" style="color:var(--text)">0</strong></div>
+  <div id="abc-plan-info" style="font-size:0.857em;color:var(--text2);margin-bottom:8px"><span id="lbl-slot-lim">Limit slotów z kalkulacji EPE:</span> <strong id="slot-limit-display" style="color:var(--text)">—</strong> <span id="lbl-per-day">przezbrojeń/dzień</span> &nbsp;·&nbsp; <span id="lbl-assigned">Przydzielono:</span> <strong id="slot-used-display" style="color:var(--text)">0</strong></div>
   <div class="grid-4" id="abc-ctrls"></div>
   <div class="alert warn" id="warn-slots"></div>
 </div>
@@ -330,7 +330,7 @@ tr:hover td { background: var(--surface2); }
   <div class="card" style="padding:0; overflow:hidden;">
     <div style="overflow-x:auto;"><div id="ptable"></div></div>
   </div>
-  <div class="table-note">P95 = 95% zleceń obsłużonych w ciągu X dni od pojawienia się zapotrzebowania.</div>
+  <div class="table-note" id="perc-note-static">P95 = 95% zleceń obsłużonych w ciągu X dni od pojawienia się zapotrzebowania.</div>
 </div>
 
 </div>
@@ -348,8 +348,8 @@ let DEMAND = {};
 let chartInst = null;
 
 function fmtSlot(v) {
-  if (v === 0) return 'nigdy';
-  return 'co ' + Math.round(1/v) + ' dni';
+  if (v === 0) return T('tblNever');
+  return T('every') + ' ' + Math.round(1/v) + ' ' + T('epeUnit');
 }
 // Format slot value for display: integers shown as integer, fractions as decimal
 function fmtSlotVal(v) {
@@ -516,7 +516,7 @@ function buildAbcControls() {
       </div>
       <div id="freq-${g}" style="margin-top:6px;font-size:0.786em;color:var(--text2)">—</div>
       <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:0.786em;color:var(--text2)">
-        Śr. <strong style="color:var(--text)">${avgPerDay[g]}</strong> indeksów/dzień &nbsp;·&nbsp; <strong style="color:var(--text)">${totalIndices[g]}</strong> unikalnych indeksów
+        ${T('avg')} <strong style="color:var(--text)">${avgPerDay[g]}</strong> ${T('avgPerDay')} &nbsp;·&nbsp; <strong style="color:var(--text)">${totalIndices[g]}</strong> ${T('unique')}
       </div>
     </div>`;
   }).join('');
@@ -790,35 +790,40 @@ function renderEPE(epe) {
   const epeRounded = isFinite(epe.epe) ? epe.epe : null;
   const epeVal = epeRounded !== null ? epeRounded : '∞';
   const epeRawStr = isFinite(epe.epeRaw) ? epe.epeRaw.toFixed(2) : '∞';
-  const epeUnit = epeRounded !== null && epeRounded > 0 ? `co ${epeRounded} ${epeRounded === 1 ? 'dzień' : 'dni'}` : '—';
+  const epeUnit = epeRounded !== null && epeRounded > 0 ? `${T('every')} ${epeRounded} ${T(epeRounded === 1 ? 'dayOne' : 'epeUnit')}` : '—';
+
+  const perDayStr = currentLang === 'en' ? '/day' : '/dzień';
+  const step3suffix = epe.maxSetups < 1
+    ? ' (' + T('every') + ' ' + Math.round(1/epe.maxSetups) + ' ' + T('epeUnit') + ')'
+    : perDayStr;
 
   steps.innerHTML = `
     <div class="epe-step">
-      <div class="step-n">Krok 1</div>
+      <div class="step-n">${T('krok')} 1</div>
       <div class="step-v">${Math.round(epe.avgProdMin)} min</div>
-      <div class="step-d">Średnie dzienne obciążenie produkcją</div>
+      <div class="step-d">${T('epeStep1')}</div>
     </div>
     <div class="epe-step">
-      <div class="step-n">Krok 2</div>
+      <div class="step-n">${T('krok')} 2</div>
       <div class="step-v">${Math.round(epe.timeForSetups)} min</div>
-      <div class="step-d">Czas dostępny na przezbrojenia</div>
+      <div class="step-d">${T('epeStep2')}</div>
     </div>
     <div class="epe-step">
-      <div class="step-n">Krok 3</div>
-      <div class="step-v">${epe.maxSetups.toFixed(2)}${epe.maxSetups < 1 ? ' <span style="font-size:0.857em;font-weight:400;color:var(--text2)">(co ' + Math.round(1/epe.maxSetups) + ' dni)</span>' : '/dzień'}</div>
-      <div class="step-d">Możliwa liczba przezbrojeń / dzień</div>
+      <div class="step-n">${T('krok')} 3</div>
+      <div class="step-v">${epe.maxSetups.toFixed(2)}<span style="font-size:0.857em;font-weight:400;color:var(--text2)">${step3suffix}</span></div>
+      <div class="step-d">${T('epeStep3')}</div>
     </div>
     <div class="epe-step">
-      <div class="step-n">Krok 4</div>
+      <div class="step-n">${T('krok')} 4</div>
       <div class="step-v">${epe.avgUnique.toFixed(1)}</div>
-      <div class="step-d">Średnia liczba indeksów / dzień</div>
+      <div class="step-d">${T('epeStep4')}</div>
     </div>`;
 
   result.innerHTML = `
     <div class="epe-val">${epeVal}</div>
     <div class="epe-desc">
-      <strong>EPE = ${epeVal} dni</strong> — zamówienia/zlecenia mogą być realizowane ${epeUnit}.<br>
-      Wynik surowy: ${epe.avgUnique.toFixed(1)} / ${epe.maxSetups.toFixed(1)} = ${epeRawStr} → zaokrąglone w górę do ${epeVal}
+      <strong>EPE = ${epeVal} ${T('epeUnit')}</strong> — ${T('epeResult')} ${epeUnit}.<br>
+      ${T('epeRaw')} ${epe.avgUnique.toFixed(1)} / ${epe.maxSetups.toFixed(1)} = ${epeRawStr} → ${T('epeRounded')} ${epeVal}
     </div>`;
 }
 
@@ -916,8 +921,8 @@ function renderUtilization(dayLoad, netMin, availMin, stopsMin, oeeT, growth) {
     row('#d85a30', T('utilSetup'),               avgSetupMin,           pSetup2)  +
     row(isDark?'#3a3a38':'#d3d1c7', T('utilIdle'), avgIdleMin,        pIdle2)   +
     `<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:0.786em;color:var(--text2)">
-      Łącznie dni: <strong style="color:var(--text)">${n}</strong> &nbsp;·&nbsp;
-      Dni z przekroczeniem czasu: <strong style="color:${overDays>0?'var(--danger)':'var(--text)'}">${overDays}</strong>
+      ${T('utilDays')} <strong style="color:var(--text)">${n}</strong> &nbsp;·&nbsp;
+      ${T('utilOver')} <strong style="color:${overDays>0?'var(--danger)':'var(--text)'}">${overDays}</strong>
     </div>`;
 }
 
@@ -928,15 +933,15 @@ function renderCards(waitDays, slots, freerun) {
     // Global single card
     const allWait = [...waitDays.a, ...waitDays.b, ...waitDays.c, ...waitDays.def];
     const avg = allWait.length ? mean(allWait).toFixed(1) + ' dni' : '—';
-    const mx  = allWait.length ? 'maks. ' + Math.max(...allWait) + ' dni' : '—';
+    const mx  = allWait.length ? T('maks')+' ' + Math.max(...allWait) + ' '+T('epeUnit') : '—';
     el.innerHTML = `<div class="card-metric" style="border-left:3px solid var(--blue)">
       <div class="val">${avg}</div>
-      <div class="lbl">Globalnie — śr. oczekiwanie (FIFO)</div>
+      <div class="lbl">${T('tblGlobal')} — ${T('avgWait')} (FIFO)</div>
       <div class="sub">${mx}</div>
     </div>` + GROUPS.map(g => {
       const wd = waitDays[g];
       const avg2 = wd.length ? mean(wd).toFixed(1) + ' dni' : '—';
-      const mx2  = wd.length ? 'maks. ' + Math.max(...wd) + ' dni' : '—';
+      const mx2  = wd.length ? T('maks')+' ' + Math.max(...wd) + ' '+T('epeUnit') : '—';
       return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]};opacity:0.5">
         <div class="val" style="font-size:1.143em">${avg2}</div>
         <div class="lbl">Gr. ${GROUP_LABELS[g]}</div>
@@ -947,11 +952,11 @@ function renderCards(waitDays, slots, freerun) {
     el.innerHTML = GROUPS.map(g => {
       const wd = waitDays[g];
       const s = slots[g];
-      const avg = s === 0 ? '—' : mean(wd).toFixed(1) + ' dni';
-      const mx = s === 0 ? T('tblNever') : 'maks. ' + (wd.length ? Math.max(...wd) : 0) + ' dni';
+      const avg = s === 0 ? '—' : mean(wd).toFixed(1) + ' '+T('epeUnit');
+      const mx = s === 0 ? T('tblNever') : T('maks')+' ' + (wd.length ? Math.max(...wd) : 0) + ' '+T('epeUnit');
       return `<div class="card-metric" style="border-left:3px solid ${COLORS[g]}">
         <div class="val">${avg}</div>
-        <div class="lbl">Gr. ${GROUP_LABELS[g]} — śr. oczekiwanie</div>
+        <div class="lbl">Gr. ${GROUP_LABELS[g]} — ${T('avgWait')}</div>
         <div class="sub">${mx}</div>
       </div>`;
     }).join('');
@@ -1071,7 +1076,7 @@ function renderTable(waitDays, slots, freerun) {
     const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[g]};margin-right:6px;vertical-align:middle"></span>`;
     const rowOp = freerun ? ' style="opacity:0.45"' : '';
     if (s === 0 && !freerun) {
-      html += `<tr${rowOp}><td>${dot}${GROUP_LABELS[g]}</td><td style="color:var(--text3)">nigdy</td><td>${wd.length}</td>${[0,0,0,0].map(()=>'<td style="color:var(--text3)">—</td>').join('')}<td style="color:var(--text3)">—</td></tr>`;
+      html += `<tr${rowOp}><td>${dot}${GROUP_LABELS[g]}</td><td style="color:var(--text3)">${T('tblNever')}</td><td>${wd.length}</td>${[0,0,0,0].map(()=>'<td style="color:var(--text3)">—</td>').join('')}<td style="color:var(--text3)">—</td></tr>`;
     } else {
       const freqCell = freerun ? '—' : `${s} ${T('slotPerDay')}`;
       html += `<tr${rowOp}><td>${dot}${GROUP_LABELS[g]}</td><td>${freqCell}</td><td>${wd.length}</td>
@@ -1126,9 +1131,9 @@ function go() {
 
   // Show computed net time
   const netEl = document.getElementById('net-display');
-  const growthLabel = growth !== 100 ? ` &nbsp;·&nbsp; Wzrost produkcji: <strong style="color:${growth>100?'var(--danger)':'var(--green)'}">${growth}%</strong>` : '';
+  const growthLabel = growth !== 100 ? ` &nbsp;·&nbsp; ${T('lblGrowth')}: <strong style="color:${growth>100?'var(--danger)':'var(--green)'}">${growth}%</strong>` : '';
   if (netEl) netEl.innerHTML = `
-    <span style="font-size:1.0em;font-weight:500;color:var(--text)">Dostępny czas na produkcję: (${availMin} − ${stopsMin}) × ${oeeT}% = <span style="color:var(--blue)">${netMin} min/dzień</span>${growthLabel}</span>`;
+    <span style="font-size:1.0em;font-weight:500;color:var(--text)">${currentLang==='en'?'Available production time':'Dostępny czas na produkcję'}: (${availMin} − ${stopsMin}) × ${oeeT}% = <span style="color:var(--blue)">${netMin} ${currentLang==='en'?'min/day':'min/dzień'}</span>${growthLabel}</span>`;
 
   // Read fractional slot counts per group
   const slots = {};
@@ -1140,7 +1145,7 @@ function go() {
   const warnTime = document.getElementById('warn-time');
   if (netMin <= 0) {
     warnTime.style.display = 'block';
-    warnTime.textContent = `Dostępny czas na produkcję wynosi ${netMin} min — sprawdź parametry.`;
+    warnTime.textContent = T('warnTime')+' '+netMin+' min — '+T('checkParams');
   } else {
     warnTime.style.display = 'none';
   }
@@ -1167,7 +1172,7 @@ function go() {
   const slotLimit = epe ? Math.floor(epe.maxSetups) : totalSlots;
   const slotLimitEl = document.getElementById('slot-limit-display');
   const slotUsedEl = document.getElementById('slot-used-display');
-  if (slotLimitEl) slotLimitEl.textContent = slotLimit.toFixed(1) + ' przezbrojeń/dzień';
+  if (slotLimitEl) slotLimitEl.textContent = slotLimit.toFixed(1) + ' ' + T('lblPerDay');
   const totalUsed = GROUPS.reduce((s,g) => s + slots[g], 0);
   if (slotUsedEl) {
     slotUsedEl.textContent = totalUsed;
@@ -1183,7 +1188,7 @@ function go() {
   const warnSlots = document.getElementById('warn-slots');
   if (totalUsed > slotLimit + 0.05) {
     warnSlots.style.display = 'block';
-    warnSlots.textContent = `Suma slotów grup (${totalUsed}) przekracza limit EPE (${slotLimit} przezbrojeń/dzień).`;
+    warnSlots.textContent = T('warnSlots')+' ('+totalUsed+') '+T('warnSlotsB')+' ('+slotLimit+' '+T('lblPerDay')+')';
   } else {
     warnSlots.style.display = 'none';
   }
@@ -1323,6 +1328,13 @@ const TRANSLATIONS = {
     percNote:    'P95 = 95% zleceń obsłużonych w ciągu X dni od pojawienia się zapotrzebowania.',
     slotsUsed:   'przezbrojenia',
     krok:        'KROK',
+    avgWait:     'śr. oczekiwanie',
+    maks:        'maks.',
+    noSlots:     'brak slotów',
+    avg:         'Śr.',
+    checkParams: 'sprawdź parametry',
+    dayOne:      'dzień',
+    every:       'co',
   },
   en: {
     hdrTitle:    'Production Queue Simulation — EPE Plan',
@@ -1359,7 +1371,7 @@ const TRANSLATIONS = {
     utilStops:   'Planned downtime (avg/day)',
     utilOee:     'OEE T losses (avg/day)',
     utilDays:    'Total days:',
-    utilOver:    'Days with time overrun:',
+    utilOver:    'Days with time overtime:',
     fileDefault: 'Using default data (May 2025 – April 2026)',
     fileClick:   'Click or drag an XLSX file with order data',
     fileHint:    'Structure: Index column | date columns | abc column | CT [s] column',
@@ -1372,7 +1384,7 @@ const TRANSLATIONS = {
     epeRounded:  'rounded up to',
     tblGroup:    'Group', tblFreq: 'Frequency', tblOrders: 'Orders', tblMax: 'Max.',
     tblGlobal:   'Global', tblFifo: 'FIFO', tblNever: 'never',
-    avgPerDay:   'indices/day', unique: 'unique indices',
+    avgPerDay:   'index/day', unique: 'unique index',
     slotPerDay:  'ind./day', notProd: 'not produced',
     epeGroup:    'Group EPE =', epeUnit: 'days',
     netLabel:    'Available production time:',
@@ -1384,6 +1396,13 @@ const TRANSLATIONS = {
     percNote:    'P95 = 95% of orders served within X days of demand appearing.',
     slotsUsed:   'changeovers',
     krok:        'STEP',
+    avgWait:     'avg. waiting',
+    maks:        'max.',
+    noSlots:     'no slots',
+    avg:         'Avg.',
+    checkParams: 'check parameters',
+    dayOne:      'day',
+    every:       'every',
   }
 };
 
@@ -1446,6 +1465,14 @@ function setLang(lang) {
   if (epeTitle) epeTitle.textContent = T('secEPE');
   const percNote = document.getElementById('perc-note');
   if (percNote) percNote.textContent = T('percNote');
+  const percNoteStatic = document.getElementById('perc-note-static');
+  if (percNoteStatic) percNoteStatic.textContent = T('percNote');
+  const lblSlotLimEl = document.getElementById('lbl-slot-lim');
+  if (lblSlotLimEl) lblSlotLimEl.textContent = T('lblSlotLim');
+  const lblPerDayEl = document.getElementById('lbl-per-day');
+  if (lblPerDayEl) lblPerDayEl.textContent = T('lblPerDay');
+  const lblAssignedEl = document.getElementById('lbl-assigned');
+  if (lblAssignedEl) lblAssignedEl.textContent = T('lblAssigned');
   // ABC section title
   const abcTitle = document.getElementById('sec-abc');
   if (abcTitle) abcTitle.textContent = T('secABC');
