@@ -210,7 +210,7 @@ tr:hover td { background: var(--surface2); }
   #abc-ctrls,
   #result-cards,
   #abc-plan-info, #warn-slots, #warn-time,
-  #utilization-section { display: none !important; }
+  /* utilization-section: shown on print */
 
   /* Chart wrap: remove scroll on print */
   .chart-wrap { overflow: visible !important; width: 100% !important; }
@@ -244,6 +244,10 @@ tr:hover td { background: var(--surface2); }
   .print-abc-table, .print-queue-table { display: table !important; }
   .sumbar { display: block !important; font-size: 8pt; margin-bottom: 6px; }
   .divider { display: none !important; }
+  /* Utilization section */
+  #utilization-section { display: block !important; }
+  #utilization-section > div { display: grid !important; grid-template-columns: 190px 1fr !important; gap: 10px; align-items: start; }
+  #util-stats { display: flex !important; flex-direction: column; gap: 6px; font-size: 8pt; }
 }
 #print-params { display: none; }
 .print-abc-table { display: none; }
@@ -1450,31 +1454,41 @@ function go() {
 
 // ── PRINT HOOKS ──────────────────────────────────────────────────────────────
 function prepareChartForPrint() {
+  // Resize load chart
   const canvas = document.getElementById('loadChart');
-  if (!canvas || !chartInst) return;
-  // Resize canvas to A4-portrait printable width (~170mm at 96dpi ≈ 650px)
-  const PRINT_W = 650;
-  const PRINT_H = 240;
-  canvas._origWidth  = canvas.width;
-  canvas._origHeight = canvas.height;
-  canvas._origStyleW = canvas.style.width;
-  canvas._origStyleH = canvas.style.height;
-  canvas.width        = PRINT_W;
-  canvas.style.width  = PRINT_W + 'px';
-  canvas.height       = PRINT_H;
-  canvas.style.height = PRINT_H + 'px';
-  chartInst.resize(PRINT_W, PRINT_H);
-  chartInst.update('none');
+  if (canvas && chartInst) {
+    const PRINT_W = 620, PRINT_H = 200;
+    canvas._origWidth  = canvas.width;  canvas._origHeight = canvas.height;
+    canvas._origStyleW = canvas.style.width; canvas._origStyleH = canvas.style.height;
+    canvas.width = PRINT_W; canvas.style.width = PRINT_W + 'px';
+    canvas.height = PRINT_H; canvas.style.height = PRINT_H + 'px';
+    chartInst.resize(PRINT_W, PRINT_H); chartInst.update('none');
+  }
+  // Resize util donut chart
+  const uc = document.getElementById('utilChart');
+  if (uc && utilChartInst) {
+    uc._origWidth = uc.width; uc._origHeight = uc.height;
+    uc._origStyleW = uc.style.width; uc._origStyleH = uc.style.height;
+    uc.width = 180; uc.style.width = '180px';
+    uc.height = 180; uc.style.height = '180px';
+    utilChartInst.resize(180, 180); utilChartInst.update('none');
+  }
 }
 function restoreChartAfterPrint() {
   const canvas = document.getElementById('loadChart');
-  if (!canvas || !canvas._origWidth) return;
-  canvas.width        = canvas._origWidth;
-  canvas.style.width  = canvas._origStyleW;
-  canvas.height       = canvas._origHeight;
-  canvas.style.height = canvas._origStyleH;
-  chartInst && chartInst.resize(canvas._origWidth, canvas._origHeight);
-  chartInst && chartInst.update('none');
+  if (canvas && canvas._origWidth) {
+    canvas.width = canvas._origWidth; canvas.style.width = canvas._origStyleW;
+    canvas.height = canvas._origHeight; canvas.style.height = canvas._origStyleH;
+    chartInst && chartInst.resize(canvas._origWidth, canvas._origHeight);
+    chartInst && chartInst.update('none');
+  }
+  const uc = document.getElementById('utilChart');
+  if (uc && uc._origWidth) {
+    uc.width = uc._origWidth; uc.style.width = uc._origStyleW;
+    uc.height = uc._origHeight; uc.style.height = uc._origStyleH;
+    utilChartInst && utilChartInst.resize(uc._origWidth, uc._origHeight);
+    utilChartInst && utilChartInst.update('none');
+  }
 }
 window.addEventListener('beforeprint', prepareChartForPrint);
 window.addEventListener('afterprint',  restoreChartAfterPrint);
