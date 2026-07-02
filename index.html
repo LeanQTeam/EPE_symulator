@@ -240,11 +240,12 @@ tr:hover td { background: var(--surface2); }
   th { background: #f0f0ee; font-weight: 600; }
   th, td { border: 0.5px solid #bbb; padding: 3px 6px; }
   .print-header { display: block !important; }
+  #print-params { display: block !important; }
   .print-abc-table, .print-queue-table { display: table !important; }
   .sumbar { display: block !important; font-size: 8pt; margin-bottom: 6px; }
   .divider { display: none !important; }
 }
-.print-header { display: none; }
+#print-params { display: none; }
 .print-abc-table { display: none; }
 .print-queue-table { display: none; }
 </style>
@@ -328,20 +329,23 @@ tr:hover td { background: var(--surface2); }
     </div>
   </div>
   <div class="sumbar" id="net-display" style="margin-bottom:6px"></div>
-<div class="print-header" id="print-params">
-  <div style="font-size:10pt;font-weight:600;margin-bottom:6px;border-bottom:1px solid #aaa;padding-bottom:3px" id="pp-section-title">Parametry maszyny</div>
-  <table id="pp-table" style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px">
-    <thead>
-      <tr style="background:#eee">
-        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-param">Parametr</th>
-        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-val">Wartość</th>
-        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-note">Uwaga</th>
-      </tr>
-    </thead>
-    <tbody id="pp-tbody"></tbody>
-  </table>
-</div>
   <div class="alert warn" id="warn-time"></div>
+</div>
+
+<div id="print-params" style="display:none">
+  <div class="section" style="margin-bottom:10px">
+    <div class="section-title" id="pp-section-title">Parametry maszyny</div>
+    <table id="pp-table" style="width:100%;border-collapse:collapse;font-size:9pt">
+      <thead>
+        <tr style="background:#eee">
+          <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-param">Parametr</th>
+          <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-val">Wartość</th>
+          <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-note">Uwaga</th>
+        </tr>
+      </thead>
+      <tbody id="pp-tbody"></tbody>
+    </table>
+  </div>
 </div>
 
 <div class="epe-box">
