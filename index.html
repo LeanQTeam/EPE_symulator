@@ -206,16 +206,25 @@ tr:hover td { background: var(--surface2); }
   #cb-freerun, #cb-freerun-label, button, .slider-val,
   /* Hide entire Dane wejściowe section */
   .section:has(#sec-input),
+  /* Hide machine params section (shown as table in print-params) */
+  .section:has(#sec-machine),
+  #net-display,
   /* Hide interactive ABC cards and result cards (replaced by print tables) */
   #abc-ctrls, #result-cards,
   /* Hide slot limit bar and warnings */
   #abc-plan-info, #warn-slots, #warn-time,
-  /* Hide chart scroll wrapper but keep canvas */
-  .chart-wrap,
+  /* Chart wrap: remove scroll, show full width */
+  .chart-wrap { overflow: visible !important; width: 100% !important; }
   /* Hide utilization donut */
   #utilization-section { display: none !important; }
 
-  canvas { display: block !important; max-width: 100% !important; height: auto !important; }
+  canvas { display: block !important; max-width: 100% !important; }
+  /* Force color printing */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .legend { display: flex !important; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; font-size: 8pt; }
+  .leg { display: flex !important; align-items: center; gap: 4px; }
+  .leg-sq { display: block !important; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .leg-line { display: block !important; width: 16px; height: 2px; flex-shrink: 0; }
 
   body { background: #fff !important; font-size: 9pt !important; color: #000 !important; }
   header { border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 10px; }
@@ -262,7 +271,7 @@ tr:hover td { background: var(--surface2); }
       <button id="btn-pl" onclick="setLang('pl')" style="padding:5px 12px;font-size:0.857em;border:none;cursor:pointer;font-family:inherit;background:var(--blue);color:#fff;font-weight:500">PL</button>
       <button id="btn-en" onclick="setLang('en')" style="padding:5px 12px;font-size:0.857em;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text2)">EN</button>
     </div>
-    <button onclick="window.print()" id="btn-print" title="Drukuj raport" style="display:flex;align-items:center;gap:6px;padding:5px 14px;font-size:0.857em;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;font-weight:500">
+    <button onclick="prepareChartForPrint(); window.print();" id="btn-print" title="Drukuj raport" style="display:flex;align-items:center;gap:6px;padding:5px 14px;font-size:0.857em;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;font-weight:500">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
       </svg>
@@ -1437,6 +1446,37 @@ function go() {
   renderTable(waitDays, slots, freerun);
   renderPrintTables(waitDays, slots, freerun);
 }
+
+// ── PRINT HOOKS ──────────────────────────────────────────────────────────────
+function prepareChartForPrint() {
+  const canvas = document.getElementById('loadChart');
+  if (!canvas || !chartInst) return;
+  // Resize canvas to A4-portrait printable width (~170mm at 96dpi ≈ 650px)
+  const PRINT_W = 650;
+  const PRINT_H = 240;
+  canvas._origWidth  = canvas.width;
+  canvas._origHeight = canvas.height;
+  canvas._origStyleW = canvas.style.width;
+  canvas._origStyleH = canvas.style.height;
+  canvas.width        = PRINT_W;
+  canvas.style.width  = PRINT_W + 'px';
+  canvas.height       = PRINT_H;
+  canvas.style.height = PRINT_H + 'px';
+  chartInst.resize(PRINT_W, PRINT_H);
+  chartInst.update('none');
+}
+function restoreChartAfterPrint() {
+  const canvas = document.getElementById('loadChart');
+  if (!canvas || !canvas._origWidth) return;
+  canvas.width        = canvas._origWidth;
+  canvas.style.width  = canvas._origStyleW;
+  canvas.height       = canvas._origHeight;
+  canvas.style.height = canvas._origStyleH;
+  chartInst && chartInst.resize(canvas._origWidth, canvas._origHeight);
+  chartInst && chartInst.update('none');
+}
+window.addEventListener('beforeprint', prepareChartForPrint);
+window.addEventListener('afterprint',  restoreChartAfterPrint);
 
 // ── DRAG & DROP ───────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
