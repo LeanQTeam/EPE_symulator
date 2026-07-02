@@ -194,6 +194,46 @@ tr:hover td { background: var(--surface2); }
 .file-status.err { color: var(--danger); }
 
 .divider { border: none; border-top: 0.5px solid var(--border); margin: 28px 0; }
+
+@media print {
+  /* Hide interactive controls */
+  header .print-hide,
+  #btn-print,
+  #sl-fontsize,
+  #lbl-font,
+  .drop-zone,
+  #file-status,
+  input[type=range],
+  input[type=number],
+  input[type=text],
+  input[type=file],
+  #cb-freerun,
+  #cb-freerun-label,
+  button,
+  .slider-val,
+  .chart-wrap { display: none !important; }
+
+  /* Show chart as static image */
+  canvas { display: block !important; max-width: 100%; }
+
+  /* Page setup */
+  @page { margin: 15mm; size: A4 landscape; }
+  body { background: #fff !important; font-size: 10pt !important; color: #000 !important; }
+  header { border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 12px; }
+  .section, .epe-box { break-inside: avoid; margin-bottom: 12px; border: 0.5px solid #ccc; }
+  .section-title, .epe-title { font-size: 10pt !important; font-weight: 600; }
+  .card { break-inside: avoid; border: 0.5px solid #ddd !important; }
+  .card-metric { break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 0.5px solid #bbb; padding: 3px 6px; font-size: 9pt; }
+
+  /* Show parameter values as text next to labels */
+  .print-val { display: inline !important; }
+
+  /* Print header */
+  .print-header { display: block !important; font-size: 9pt; color: #555; margin-bottom: 4px; }
+}
+.print-header { display: none; }
 </style>
 </head>
 <body>
@@ -215,6 +255,12 @@ tr:hover td { background: var(--surface2); }
       <button id="btn-pl" onclick="setLang('pl')" style="padding:5px 12px;font-size:0.857em;border:none;cursor:pointer;font-family:inherit;background:var(--blue);color:#fff;font-weight:500">PL</button>
       <button id="btn-en" onclick="setLang('en')" style="padding:5px 12px;font-size:0.857em;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text2)">EN</button>
     </div>
+    <button onclick="window.print()" id="btn-print" title="Drukuj raport" style="display:flex;align-items:center;gap:6px;padding:5px 14px;font-size:0.857em;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;font-weight:500">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+      </svg>
+      <span id="btn-print-lbl">Drukuj</span>
+    </button>
   </div>
 </header>
 
@@ -269,6 +315,19 @@ tr:hover td { background: var(--surface2); }
     </div>
   </div>
   <div class="sumbar" id="net-display" style="margin-bottom:6px"></div>
+<div class="print-header" id="print-params">
+  <div style="font-size:10pt;font-weight:600;margin-bottom:6px;border-bottom:1px solid #aaa;padding-bottom:3px" id="pp-section-title">Parametry maszyny</div>
+  <table id="pp-table" style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px">
+    <thead>
+      <tr style="background:#eee">
+        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-param">Parametr</th>
+        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-val">Wartość</th>
+        <th style="padding:4px 8px;text-align:left;border:0.5px solid #ccc;font-weight:600" id="pp-th-note">Uwaga</th>
+      </tr>
+    </thead>
+    <tbody id="pp-tbody"></tbody>
+  </table>
+</div>
   <div class="alert warn" id="warn-time"></div>
 </div>
 
@@ -1183,6 +1242,27 @@ function go() {
   if (netEl) netEl.innerHTML = `
     <span style="font-size:1.0em;font-weight:500;color:var(--text)">${currentLang==='en'?'Available production time':'Dostępny czas na produkcję'}: (${availMin} − ${stopsMin}) × ${oeeT}% = <span style="color:var(--blue)">${netMin} ${currentLang==='en'?'min/day':'min/dzień'}</span>${growthLabel}</span>`;
 
+  // Update print-only parameter table
+  const isEn = currentLang === 'en';
+  const ppRows = [
+    [isEn?'Available time per day':'Dostępny czas na dzień',           availMin + ' min',  ''],
+    [isEn?'Planned downtime':'Planowane przestoje',                     stopsMin + ' min',  ''],
+    [isEn?'OEE T (excl. changeovers)':'OEE T (bez przezbrojeń)',       oeeT + '%',         ''],
+    [isEn?'Changeover time':'Czas przezbrojenia',                       setupMin + ' min',  ''],
+    [isEn?'Production growth/decline':'Wzrost/spadek produkcji',        growth + '%',       growth===100?'':(growth>100?(isEn?'increase':'wzrost'):(isEn?'decline':'spadek'))],
+    [isEn?'Available production time (calculated)':'Dostępny czas na produkcję (wyliczony)',
+      netMin + ' min',
+      '(' + availMin + ' − ' + stopsMin + ') × ' + oeeT + '% = ' + netMin + ' min'],
+  ];
+  const tbody = document.getElementById('pp-tbody');
+  if (tbody) tbody.innerHTML = ppRows.map(([p,v,n]) =>
+    `<tr><td style="padding:4px 8px;border:0.5px solid #ccc">${p}</td><td style="padding:4px 8px;border:0.5px solid #ccc;font-weight:500">${v}</td><td style="padding:4px 8px;border:0.5px solid #ccc;color:#555">${n}</td></tr>`
+  ).join('');
+  // Translate table headers
+  const ppThP = document.getElementById('pp-th-param'); if(ppThP) ppThP.textContent = isEn?'Parameter':'Parametr';
+  const ppThV = document.getElementById('pp-th-val');   if(ppThV) ppThV.textContent = isEn?'Value':'Wartość';
+  const ppThN = document.getElementById('pp-th-note');  if(ppThN) ppThN.textContent = isEn?'Note':'Uwaga';
+
   // Read fractional slot counts per group
   const slots = {};
   for (const g of GROUPS) {
@@ -1524,6 +1604,10 @@ function setLang(lang) {
   // ABC section title
   const abcTitle = document.getElementById('sec-abc');
   if (abcTitle) abcTitle.textContent = T('secABC');
+  const printLbl = document.getElementById('btn-print-lbl');
+  if (printLbl) printLbl.textContent = currentLang === 'en' ? 'Print' : 'Drukuj';
+  const ppSec = document.getElementById('pp-section-title');
+  if (ppSec) ppSec.textContent = currentLang === 'en' ? 'Machine parameters' : 'Parametry maszyny';
   // Rebuild ABC controls and re-render
   buildAbcControls();
   go();
